@@ -1,0 +1,370 @@
+{
+  "entities": {
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Tenant definition for educational organization or tutor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "schoolSubject": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "name", "teacherName", "phone", "email", "created_at"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role and linked student references",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["teacher", "parent", "student"] },
+        "avatar": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "name", "email", "role"]
+    },
+    "School": {
+      "title": "School",
+      "description": "School entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "code", "name", "status", "created_at"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Subject taught in classes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["id", "tenant_id", "code", "name", "status"]
+    },
+    "ClassRoom": {
+      "title": "ClassRoom",
+      "description": "Classroom details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "name": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "gradeLevel": { "type": "string" },
+        "feePerSession": { "type": "number" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "name", "subjectId", "feePerSession", "status", "created_at"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "dob": { "type": "string" },
+        "birthYear": { "type": "number" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "schoolCode": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "schoolGrade": { "type": "string" },
+        "parentName": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "parentEmail": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "paused", "graduated"] },
+        "accountStatus": { "type": "string", "enum": ["uninvited", "invited", "active", "locked"] },
+        "accountCreatedAt": { "type": "string" },
+        "lastActivatedAt": { "type": "string" },
+        "notes": { "type": "string" },
+        "joinedDate": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "fullName", "phone", "schoolId", "parentName", "parentPhone", "status", "joinedDate"]
+    },
+    "Parent": {
+      "title": "Parent",
+      "description": "Parent entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "accountStatus": { "type": "string", "enum": ["uninvited", "invited", "active", "locked"] },
+        "accountCreatedAt": { "type": "string" },
+        "lastActivatedAt": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "fullName", "phone", "accountStatus", "created_at"]
+    },
+    "ParentStudent": {
+      "title": "ParentStudent",
+      "description": "Parent to Student many-to-many relationship",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "parent_id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "relationship": { "type": "string" },
+        "is_primary": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "parent_id", "student_id", "relationship", "is_primary", "created_at"]
+    },
+    "AccountInvitation": {
+      "title": "AccountInvitation",
+      "description": "Account invitation tokens for parents and students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "parent_id": { "type": "string" },
+        "invitation_type": { "type": "string", "enum": ["student", "parent"] },
+        "recipient_name": { "type": "string" },
+        "recipient_email": { "type": "string" },
+        "recipient_phone": { "type": "string" },
+        "token_hash": { "type": "string" },
+        "token": { "type": "string" },
+        "expires_at": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "sent", "accepted", "expired", "revoked"] },
+        "created_by": { "type": "string" },
+        "created_at": { "type": "string" },
+        "accepted_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "student_id", "invitation_type", "recipient_name", "token_hash", "token", "expires_at", "status", "created_by", "created_at"]
+    },
+    "LessonSession": {
+      "title": "LessonSession",
+      "description": "Session instance for a class",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "date": { "type": "string" },
+        "dayOfWeek": { "type": "number" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "sessionType": { "type": "string" },
+        "status": { "type": "string" },
+        "feeEligible": { "type": "boolean" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "classId", "date", "sessionType", "status", "feeEligible", "created_at"]
+    },
+    "Lesson": {
+      "title": "Lesson",
+      "description": "Lesson topic and materials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "title", "content", "created_at"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Attendance mark per student per session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "classId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "status": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "sessionId", "classId", "studentId", "status", "updated_at"]
+    },
+    "StudentEvaluation": {
+      "title": "StudentEvaluation",
+      "description": "Evaluation and grades for student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "lessonId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "remarks": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "lessonId", "studentId", "updated_at"]
+    },
+    "Homework": {
+      "title": "Homework",
+      "description": "Homework assignment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "classId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "totalPoints": { "type": "number" },
+        "status": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "classId", "title", "dueDate", "totalPoints", "status", "created_at"]
+    },
+    "HomeworkSubmission": {
+      "title": "HomeworkSubmission",
+      "description": "Student homework submission",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "homeworkId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "submittedAt": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "homeworkId", "studentId", "submittedAt", "status"]
+    },
+    "TuitionItem": {
+      "title": "TuitionItem",
+      "description": "Tuition fee item for student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "periodMonth": { "type": "number" },
+        "periodYear": { "type": "number" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "classId": { "type": "string" },
+        "feePerSession": { "type": "number" },
+        "sessionCount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "paymentReference": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "periodMonth", "periodYear", "studentId", "classId", "totalAmount", "paidAmount", "status", "paymentReference", "created_at", "updated_at"]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "System notification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "recipientRole": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "tenant_id", "recipientRole", "type", "title", "content", "isRead", "created_at"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile collection"
+    },
+    "/schools/{schoolId}": {
+      "schema": { "$ref": "#/entities/School" },
+      "description": "Schools collection"
+    },
+    "/subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/Subject" },
+      "description": "Subjects collection"
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/ClassRoom" },
+      "description": "Classrooms collection"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Students collection"
+    },
+    "/parents/{parentId}": {
+      "schema": { "$ref": "#/entities/Parent" },
+      "description": "Parents collection"
+    },
+    "/parent_students/{relationId}": {
+      "schema": { "$ref": "#/entities/ParentStudent" },
+      "description": "Parent students relationship collection"
+    },
+    "/account_invitations/{invitationId}": {
+      "schema": { "$ref": "#/entities/AccountInvitation" },
+      "description": "Account invitations collection"
+    },
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/LessonSession" },
+      "description": "Sessions collection"
+    },
+    "/lessons/{lessonId}": {
+      "schema": { "$ref": "#/entities/Lesson" },
+      "description": "Lessons collection"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Attendance records collection"
+    },
+    "/evaluations/{evaluationId}": {
+      "schema": { "$ref": "#/entities/StudentEvaluation" },
+      "description": "Student evaluations collection"
+    },
+    "/homeworks/{homeworkId}": {
+      "schema": { "$ref": "#/entities/Homework" },
+      "description": "Homework collection"
+    },
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/HomeworkSubmission" },
+      "description": "Homework submissions collection"
+    },
+    "/tuitions/{tuitionId}": {
+      "schema": { "$ref": "#/entities/TuitionItem" },
+      "description": "Tuitions collection"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "Notifications collection"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Hệ thống Quản lý Dạy học thêm",
+  "description": "Hệ thống SaaS quản lý dạy học thêm: Lớp học, học sinh, điểm danh, bài tập, tính học phí, sinh mã VietQR và đối soát sao kê ngân hàng tự động.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

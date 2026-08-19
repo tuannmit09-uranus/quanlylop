@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Allow read & write for full-featured multi-tenant education management app
+    match /{document=**} {
+      allow read, write: if true;
+    }
+
+    // Connection testing
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+
+    // Tenants / Centers
+    match /tenants/{tenantId} {
+      allow read, write: if true;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Schools
+    match /schools/{schoolId} {
+      allow read, write: if true;
+    }
+
+    // Subjects
+    match /subjects/{subjectId} {
+      allow read, write: if true;
+    }
+
+    // Classes
+    match /classes/{classId} {
+      allow read, write: if true;
+    }
+
+    // Students
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+
+    // Parents
+    match /parents/{parentId} {
+      allow read, write: if true;
+    }
+
+    // Parent-Student Relationships
+    match /parent_students/{relationId} {
+      allow read, write: if true;
+    }
+
+    // Account Invitations
+    match /account_invitations/{invitationId} {
+      allow read, write: if true;
+    }
+
+    // Recurring Schedules
+    match /schedules/{scheduleId} {
+      allow read, write: if true;
+    }
+
+    // Sessions
+    match /sessions/{sessionId} {
+      allow read, write: if true;
+    }
+
+    // Lessons
+    match /lessons/{lessonId} {
+      allow read, write: if true;
+    }
+
+    // Attendance
+    match /attendance/{attendanceId} {
+      allow read, write: if true;
+    }
+
+    // Evaluations
+    match /evaluations/{evaluationId} {
+      allow read, write: if true;
+    }
+
+    // Homeworks
+    match /homeworks/{homeworkId} {
+      allow read, write: if true;
+    }
+
+    // Submissions
+    match /submissions/{submissionId} {
+      allow read, write: if true;
+    }
+
+    // Comments
+    match /comments/{commentId} {
+      allow read, write: if true;
+    }
+
+    // Tuitions
+    match /tuitions/{tuitionId} {
+      allow read, write: if true;
+    }
+
+    // Bank Statements
+    match /bankStatements/{statementId} {
+      allow read, write: if true;
+    }
+
+    // Bank Transactions
+    match /bankTransactions/{txnId} {
+      allow read, write: if true;
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
+    // Audit Logs
+    match /auditLogs/{logId} {
+      allow read, write: if true;
+    }
+  }
+}
