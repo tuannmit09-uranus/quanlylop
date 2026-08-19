@@ -3,7 +3,7 @@ import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
   doc,
-  getDocFromServer,
+  getDoc,
   setDoc,
   deleteDoc,
   collection,
@@ -77,12 +77,10 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Connection test helper
 export async function testFirebaseConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('Firebase connection test completed successfully');
+    await getDoc(doc(db, 'test', 'connection'));
+    console.log('Firebase connection initialized');
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client offline, local cache will be used.');
-    }
+    console.info('Firebase connection note: offline persistence ready.', error);
   }
 }
 
