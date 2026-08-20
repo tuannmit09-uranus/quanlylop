@@ -33,6 +33,7 @@ export const StudentDashboard: React.FC = () => {
     lessons,
     evaluations,
     currentTenant,
+    currentUser,
   } = useApp();
 
   const [selectedTuitionForQR, setSelectedTuitionForQR] = useState<any | null>(null);
@@ -41,7 +42,19 @@ export const StudentDashboard: React.FC = () => {
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const student = students.find((s) => s.id === activeStudentId) || students[0];
+  const student =
+    (currentUser?.role === 'student' &&
+      students.find(
+        (s) =>
+          s.user_id === currentUser.id ||
+          s.id === currentUser.id ||
+          `usr-stu-${s.id}` === currentUser.id ||
+          (currentUser.email && s.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+          (currentUser.name && s.fullName.toLowerCase() === currentUser.name.toLowerCase()) ||
+          (s.phone && currentUser.email && currentUser.email.includes(s.phone.replace(/\D/g, '')))
+      )) ||
+    students.find((s) => s.id === activeStudentId) ||
+    students[0];
   const mySubmissions = submissions.filter((s) => s.studentId === student.id);
   const myEvaluations = evaluations.filter((e) => e.studentId === student.id);
 

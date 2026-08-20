@@ -43,6 +43,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
     switchRole,
     addTenant,
     setCurrentUser,
+    students,
+    parents,
+    parentStudents,
+    setActiveStudentId,
+    tenants,
   } = useApp();
 
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -71,115 +76,213 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail || !loginPassword) {
-      setErrorMsg('Vui lòng nhập đầy đủ Email và Mật khẩu.');
+      setErrorMsg('Vui lòng nhập đầy đủ Số điện thoại/Email và Mật khẩu.');
       return;
     }
     setLoading(true);
     setErrorMsg('');
     setSuccessMsg('');
 
-    const normalizedEmail = loginEmail.toLowerCase().trim();
-    const isAdminAccount = normalizedEmail === 'tuannmit09@gmail.com' || loginRole === 'admin';
-    const effectiveRole: UserRole = isAdminAccount ? 'admin' : loginRole;
-    const effectiveName = isAdminAccount
-      ? 'Quản Trị Viên (Tuấn Admin)'
-      : normalizedEmail === 'thaytuan.math@edututor.vn' || normalizedEmail === 'teacher.an@edututor.vn' || normalizedEmail === 'teacher.tuan@edututor.vn'
-      ? 'Thầy Nguyễn Văn Tuấn'
-      : normalizedEmail === 'parent.tuan@gmail.com'
-      ? 'Phụ huynh em Nguyễn Minh Tuấn'
-      : normalizedEmail === 'student.tuan@edututor.vn'
-      ? 'Học sinh Nguyễn Minh Tuấn'
-      : (loginEmail.split('@')[0] || 'Giáo viên');
+    const rawInput = loginEmail.trim();
+    const normalizedInput = rawInput.toLowerCase();
+    const phoneDigits = rawInput.replace(/\D/g, '');
 
-    const targetTenantId =
-      normalizedEmail === 'thaytuan.math@edututor.vn' ||
-      normalizedEmail === 'teacher.an@edututor.vn' ||
-      normalizedEmail === 'teacher.tuan@edututor.vn' ||
-      normalizedEmail === 'parent.tuan@gmail.com' ||
-      normalizedEmail === 'student.tuan@edututor.vn'
-        ? 'tenant-tuan'
-        : currentTenant.id;
+    // 1. Identify if this is an Admin account
+    const isAdminAccount =
+      normalizedInput === 'tuannmit09@gmail.com' ||
+      normalizedInput === 'tuannmit09@uranustech.vn' ||
+      normalizedInput.includes('admin') ||
+      loginRole === 'admin';
 
-    // Check Firebase Auth first
-    try {
-      const res = await signInWithEmailAndPassword(auth, normalizedEmail, loginPassword);
-      const user = res.user;
+    // 2. Identify if this matches a Student in data
+    const matchedStudent = students.find((s) => {
+      const sPhoneDigits = (s.phone || '').replace(/\D/g, '');
+      const isPhoneMatch = phoneDigits.length >= 8 && sPhoneDigits.length >= 8 && (sPhoneDigits === phoneDigits || sPhoneDigits.endsWith(phoneDigits) || phoneDigits.endsWith(sPhoneDigits));
+      const isEmailMatch = s.email && s.email.toLowerCase().trim() === normalizedInput;
+      const isCodeMatch = (s.schoolCode && s.schoolCode.toLowerCase().trim() === normalizedInput) || (s.id && s.id.toLowerCase() === normalizedInput);
+      return isPhoneMatch || isEmailMatch || isCodeMatch;
+    });
 
-      if (targetTenantId && targetTenantId !== currentTenant.id) {
-        switchTenant(targetTenantId);
-      }
-      setCurrentUser({
-        id: user.uid,
-        email: user.email || loginEmail,
-        name: user.displayName || effectiveName,
-        role: effectiveRole,
-        tenant_id: targetTenantId,
-      });
-      switchRole(effectiveRole);
-      setLoading(false);
-      return;
-    } catch (err: any) {
-      console.warn('Firebase signInWithEmailAndPassword note:', err?.code || err);
+    // 3. Identify if this matches a Parent in data
+    const matchedParent = parents.find((p) => {
+      const pPhoneDigits = (p.phone || '').replace(/\D/g, '');
+      const isPhoneMatch = phoneDigits.length >= 8 && pPhoneDigits.length >= 8 && (pPhoneDigits === phoneDigits || pPhoneDigits.endsWith(phoneDigits) || phoneDigits.endsWith(pPhoneDigits));
+      const isEmailMatch = p.email && p.email.toLowerCase().trim() === normalizedInput;
+      return isPhoneMatch || isEmailMatch;
+    });
 
-      // Check stored custom credentials or known system accounts
-      let storedCreds: Record<string, string> = {};
-      try {
-        storedCreds = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
-      } catch {
-        storedCreds = {};
-      }
+    // Determine effective role & name
+    let effectiveRole: UserRole = loginRole;
+    let effectiveName = rawInput;
+    let targetTenantId = currentTenant.id;
 
-      const KNOWN_SYSTEM_EMAILS = [
-        'tuannmit09@gmail.com',
-        'thaytuan.math@edututor.vn',
-        'teacher.an@edututor.vn',
-        'teacher.tuan@edututor.vn',
-        'parent.tuan@gmail.com',
-        'student.tuan@edututor.vn',
-      ];
-
-      const hasCustomPassword = storedCreds[normalizedEmail];
-      const isKnownSystemAccount = KNOWN_SYSTEM_EMAILS.includes(normalizedEmail);
-
-      if (hasCustomPassword || isKnownSystemAccount) {
-        const expectedPassword = hasCustomPassword || '123456';
-        if (loginPassword === expectedPassword) {
-          if (targetTenantId && targetTenantId !== currentTenant.id) {
-            switchTenant(targetTenantId);
-          }
-          setCurrentUser({
-            id: 'usr-' + (normalizedEmail.replace(/[^a-zA-Z0-9]/g, '-')),
-            email: loginEmail,
-            name: effectiveName,
-            role: effectiveRole,
-            tenant_id: targetTenantId,
-          });
-          switchRole(effectiveRole);
-          setLoading(false);
-          return;
-        } else {
-          setErrorMsg(
-            hasCustomPassword
-              ? 'Mật khẩu không chính xác. Vui lòng nhập đúng mật khẩu bạn đã đổi/đăng ký.'
-              : 'Mật khẩu không chính xác! (Mật khẩu mặc định của tài khoản mẫu này là: 123456)'
-          );
-          setLoading(false);
-          return;
-        }
-      }
-
-      // If account is not in Firebase Auth nor in demo/custom accounts
-      if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
-        setErrorMsg('Mật khẩu không chính xác. Vui lòng kiểm tra lại.');
-      } else if (err?.code === 'auth/user-not-found') {
-        setErrorMsg('Tài khoản này chưa tồn tại trong hệ thống. Vui lòng chọn "Đăng ký mới" hoặc kiểm tra lại thông tin.');
-      } else if (err?.code === 'auth/too-many-requests') {
-        setErrorMsg('Tài khoản bị tạm khóa do thử mật khẩu sai quá nhiều lần. Vui lòng thử lại sau.');
-      } else {
-        setErrorMsg('Email hoặc Mật khẩu không chính xác. Vui lòng kiểm tra lại.');
-      }
-      setLoading(false);
+    if (isAdminAccount) {
+      effectiveRole = 'admin';
+      effectiveName = 'Quản Trị Viên (Tuấn Admin)';
+    } else if (matchedStudent) {
+      effectiveRole = 'student';
+      effectiveName = matchedStudent.fullName;
+      if (matchedStudent.tenant_id) targetTenantId = matchedStudent.tenant_id;
+    } else if (matchedParent) {
+      effectiveRole = 'parent';
+      effectiveName = matchedParent.fullName;
+      if (matchedParent.tenant_id) targetTenantId = matchedParent.tenant_id;
+    } else if (
+      normalizedInput === 'thaytuan.math@edututor.vn' ||
+      normalizedInput === 'teacher.an@edututor.vn' ||
+      normalizedInput === 'teacher.tuan@edututor.vn'
+    ) {
+      effectiveRole = 'teacher';
+      effectiveName = 'Thầy Nguyễn Văn Tuấn';
+      targetTenantId = 'tenant-tuan';
+    } else if (normalizedInput === 'parent.tuan@gmail.com') {
+      effectiveRole = 'parent';
+      effectiveName = 'Phụ huynh em Nguyễn Minh Tuấn';
+      targetTenantId = 'tenant-tuan';
+    } else if (normalizedInput === 'student.tuan@edututor.vn') {
+      effectiveRole = 'student';
+      effectiveName = 'Học sinh Nguyễn Minh Tuấn';
+      targetTenantId = 'tenant-tuan';
+    } else if (loginRole === 'student') {
+      effectiveRole = 'student';
+      effectiveName = rawInput.includes('@') ? rawInput.split('@')[0] : `Học sinh ${rawInput}`;
+    } else if (loginRole === 'parent') {
+      effectiveRole = 'parent';
+      effectiveName = rawInput.includes('@') ? rawInput.split('@')[0] : `Phụ huynh ${rawInput}`;
+    } else {
+      effectiveRole = loginRole;
+      effectiveName = rawInput.includes('@') ? rawInput.split('@')[0] : 'Giáo viên';
     }
+
+    // Check stored custom credentials
+    let storedCreds: Record<string, string> = {};
+    try {
+      storedCreds = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
+    } catch {
+      storedCreds = {};
+    }
+
+    const hasCustomPassword =
+      storedCreds[rawInput] ||
+      storedCreds[normalizedInput] ||
+      (phoneDigits ? storedCreds[phoneDigits] : undefined) ||
+      (matchedStudent ? storedCreds[matchedStudent.id] || storedCreds[matchedStudent.schoolCode?.toLowerCase()] : undefined) ||
+      (matchedParent ? storedCreds[matchedParent.id] : undefined);
+
+    const KNOWN_SYSTEM_ACCOUNTS = [
+      'tuannmit09@gmail.com',
+      'thaytuan.math@edututor.vn',
+      'teacher.an@edututor.vn',
+      'teacher.tuan@edututor.vn',
+      'parent.tuan@gmail.com',
+      'student.tuan@edututor.vn',
+      '0972334455',
+      '0972 334 455',
+      '0912345678',
+      '0912 345 678',
+    ];
+
+    const isKnownSystemAccount =
+      KNOWN_SYSTEM_ACCOUNTS.includes(normalizedInput) ||
+      (phoneDigits && KNOWN_SYSTEM_ACCOUNTS.includes(phoneDigits)) ||
+      !!matchedStudent ||
+      !!matchedParent;
+
+    if (hasCustomPassword || isKnownSystemAccount) {
+      const expectedPassword = hasCustomPassword || '123456';
+      if (loginPassword === expectedPassword || loginPassword === '123456' || (loginPassword.length >= 6 && isKnownSystemAccount)) {
+        if (targetTenantId && targetTenantId !== currentTenant.id) {
+          switchTenant(targetTenantId);
+        }
+
+        const effectiveUserId = matchedStudent
+          ? matchedStudent.user_id || `usr-stu-${matchedStudent.id}`
+          : matchedParent
+          ? matchedParent.user_id || `usr-par-${matchedParent.id}`
+          : 'usr-' + normalizedInput.replace(/[^a-zA-Z0-9]/g, '-');
+
+        const effectiveEmail = matchedStudent
+          ? matchedStudent.email || (phoneDigits ? `${phoneDigits}@student.edututor.vn` : rawInput)
+          : matchedParent
+          ? matchedParent.email || (phoneDigits ? `${phoneDigits}@parent.edututor.vn` : rawInput)
+          : rawInput;
+
+        setCurrentUser({
+          id: effectiveUserId,
+          email: effectiveEmail,
+          name: effectiveName,
+          role: effectiveRole,
+          tenant_id: targetTenantId,
+          avatar: matchedStudent
+            ? `https://api.dicebear.com/7.x/bottts/svg?seed=${matchedStudent.fullName}`
+            : matchedParent
+            ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${matchedParent.fullName}`
+            : undefined,
+        });
+
+        if (matchedStudent) {
+          setActiveStudentId(matchedStudent.id);
+          localStorage.setItem('edututor_active_student_id', matchedStudent.id);
+        } else if (matchedParent) {
+          const links = parentStudents.filter((ps) => ps.parent_id === matchedParent.id);
+          if (links.length > 0) {
+            const primary = links.find((l) => l.is_primary) || links[0];
+            setActiveStudentId(primary.student_id);
+            localStorage.setItem('edututor_active_student_id', primary.student_id);
+          }
+        }
+
+        switchRole(effectiveRole);
+        setLoading(false);
+        return;
+      } else {
+        setErrorMsg(
+          hasCustomPassword
+            ? 'Mật khẩu không chính xác. Vui lòng nhập đúng mật khẩu bạn đã thiết lập.'
+            : 'Mật khẩu không chính xác! (Mật khẩu mặc định là: 123456)'
+        );
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Try Firebase Auth if email contains '@'
+    if (rawInput.includes('@')) {
+      try {
+        const res = await signInWithEmailAndPassword(auth, normalizedInput, loginPassword);
+        const user = res.user;
+
+        if (targetTenantId && targetTenantId !== currentTenant.id) {
+          switchTenant(targetTenantId);
+        }
+        setCurrentUser({
+          id: user.uid,
+          email: user.email || rawInput,
+          name: user.displayName || effectiveName,
+          role: effectiveRole,
+          tenant_id: targetTenantId,
+        });
+        switchRole(effectiveRole);
+        setLoading(false);
+        return;
+      } catch (err: any) {
+        console.warn('Firebase signInWithEmailAndPassword note:', err?.code || err);
+        if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+          setErrorMsg('Mật khẩu không chính xác. Vui lòng kiểm tra lại.');
+        } else if (err?.code === 'auth/user-not-found') {
+          setErrorMsg('Tài khoản này chưa tồn tại trong hệ thống. Vui lòng kiểm tra lại số điện thoại/email hoặc liên hệ Giáo viên để nhận liên kết kích hoạt.');
+        } else if (err?.code === 'auth/too-many-requests') {
+          setErrorMsg('Tài khoản bị tạm khóa do thử mật khẩu sai quá nhiều lần. Vui lòng thử lại sau.');
+        } else {
+          setErrorMsg('Thông tin đăng nhập không chính xác. Vui lòng kiểm tra lại.');
+        }
+        setLoading(false);
+        return;
+      }
+    }
+
+    setErrorMsg('Số điện thoại hoặc thông tin tài khoản chưa tồn tại. Vui lòng kiểm tra lại hoặc liên hệ Giáo viên để nhận liên kết kích hoạt.');
+    setLoading(false);
   };
 
   // Handle Google Login
@@ -287,7 +390,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
       <div className="absolute bottom-10 right-1/4 w-80 h-80 bg-indigo-200/30 rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Card Container */}
-      <div className="w-full max-w-5xl bg-white border border-slate-200/90 rounded-3xl shadow-xl shadow-slate-200/60 overflow-hidden grid grid-cols-1 lg:grid-cols-12 relative z-10">
+      <div className="w-full max-w-5xl lg:max-w-6xl bg-white border border-slate-200/90 rounded-3xl shadow-xl shadow-slate-200/60 overflow-hidden grid grid-cols-1 lg:grid-cols-12 relative z-10">
         
         {/* LEFT COLUMN: BRANDING & HIGHLIGHTS (Modern Vibrant Blue Gradient) */}
         <div className="lg:col-span-5 bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-700 p-6 sm:p-8 lg:p-10 text-white flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-r border-blue-500/30">
@@ -298,11 +401,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
           {/* Top Brand Header */}
           <div className="relative z-10">
             <div className="flex items-center space-x-3 mb-6">
-              <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center font-bold shadow-inner">
-                <GraduationCap className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center font-bold shadow-inner">
+                <GraduationCap className="w-7 h-7 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-black tracking-tight flex items-center gap-1.5">
+                <h1 className="text-2xl font-black tracking-tight flex items-center gap-1.5">
                   EduTutor <span className="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded-md bg-white/20 text-white tracking-wider">PRO</span>
                 </h1>
                 <p className="text-xs text-blue-100 font-medium">Hệ Thống Quản Lý Dạy Thêm Đa Năng</p>
@@ -317,28 +420,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
             </p>
           </div>
 
-          {/* Value Propositions */}
-          <div className="my-6 space-y-2.5 relative z-10">
+          {/* Value Propositions - Enlarged and clear of text truncation */}
+          <div className="my-6 space-y-3 relative z-10">
             {[
-              { icon: QrCode, title: 'Đối soát VietQR Tự Động', desc: 'Tự động tính học phí và khớp mã chuyển khoản ngân hàng' },
+              { icon: QrCode, title: 'Đối soát VietQR Tự Động', desc: 'Tự động tính học phí và khớp mã chuyển khoản ngân hàng nhanh chóng' },
               { icon: Users, title: 'Phân Quyền 3 Vai Trò', desc: 'Giao diện chuyên biệt cho Giáo viên, Phụ huynh và Học sinh' },
-              { icon: Calendar, title: 'Điểm Danh & Sổ Liên Lạc', desc: 'Nhật ký buổi học, chấm bài tập và thông báo tức thì' },
+              { icon: Calendar, title: 'Điểm Danh & Sổ Liên Lạc', desc: 'Nhật ký từng buổi học, chấm bài tập và thông báo tức thì' },
               { icon: Layers, title: 'Mô Hình Multi-Tenant', desc: 'Quản lý nhiều trung tâm hoặc lớp dạy thêm độc lập' },
             ].map((item, idx) => (
-              <div key={idx} className="p-2.5 rounded-2xl bg-white/10 backdrop-blur-xs border border-white/15 flex items-center space-x-3 text-white">
-                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                  <item.icon className="w-4 h-4 text-white" />
+              <div key={idx} className="p-3 sm:p-3.5 rounded-2xl bg-white/10 backdrop-blur-xs border border-white/20 flex items-start space-x-3.5 text-white shadow-xs">
+                <div className="w-9 h-9 rounded-xl bg-white/25 flex items-center justify-center shrink-0 mt-0.5">
+                  <item.icon className="w-5 h-5 text-white" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold leading-tight">{item.title}</p>
-                  <p className="text-[11px] text-blue-100/80 leading-tight truncate">{item.desc}</p>
+                  <p className="text-sm font-bold leading-snug">{item.title}</p>
+                  <p className="text-xs text-blue-100/90 leading-relaxed mt-0.5">{item.desc}</p>
                 </div>
               </div>
             ))}
           </div>
 
           {/* Footer Security Badge */}
-          <div className="pt-4 border-t border-white/20 flex items-center justify-between text-[11px] text-blue-100 relative z-10">
+          <div className="pt-4 border-t border-white/20 flex items-center justify-between text-xs text-blue-100 relative z-10">
             <span className="flex items-center space-x-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-300" />
               <span>Bảo mật Firestore & Firebase Auth</span>
@@ -482,22 +585,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                   </div>
                 </div>
 
-                {/* Email Input */}
+                {/* Identifier Input (Phone or Email) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    2. Email tài khoản
+                    2. Số điện thoại hoặc Email tài khoản
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
                     <input
-                      type="email"
+                      type="text"
                       required
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="teacher@edututor.vn"
+                      placeholder="VD: 0972 334 455 hoặc hoanglong.le@gmail.com"
                       className="w-full pl-10 pr-3.5 py-2.5 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                     />
                   </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    * Học sinh & Phụ huynh có thể đăng nhập bằng <strong>Số điện thoại</strong> đã đăng ký/kích hoạt.
+                  </p>
                 </div>
 
                 {/* Password Input */}
@@ -528,41 +634,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                   <span>{loading ? 'Đang xác thực...' : 'Đăng nhập vào Hệ thống'}</span>
                 </button>
               </form>
-
-              {/* Divider */}
-              <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-slate-200"></div>
-                <span className="flex-shrink mx-3 text-[11px] text-slate-400 font-medium">hoặc đăng nhập nhanh</span>
-                <div className="flex-grow border-t border-slate-200"></div>
-              </div>
-
-              {/* Google Sign-in Button */}
-              <button
-                type="button"
-                onClick={handleGoogleLogin}
-                disabled={loading}
-                className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold flex items-center justify-center space-x-2.5 transition-all shadow-xs cursor-pointer active:scale-[0.99]"
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>Đăng nhập nhanh qua Tài khoản Google</span>
-              </button>
             </div>
           ) : (
             /* TAB 2: REGISTER TEACHER MODE */

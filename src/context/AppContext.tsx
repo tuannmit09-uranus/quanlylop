@@ -235,7 +235,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>('teacher');
-  const [activeStudentId, setActiveStudentId] = useState<string>('stu-1');
+  const [activeStudentId, setActiveStudentId] = useState<string>(() => {
+    const saved = localStorage.getItem('edututor_active_student_id');
+    return saved || 'stu-1';
+  });
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: UserRole; tenant_id: string; avatar?: string } | null>(() => {
     const saved = localStorage.getItem('edututor_current_user');
     if (saved) {
@@ -254,23 +257,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return null;
   });
-
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('edututor_current_user', JSON.stringify(currentUser));
-      if (currentUser.role === 'admin') {
-        setCurrentRole('admin');
-      } else if (currentUser.tenant_id && currentUser.role === 'teacher') {
-        setCurrentTenantId(currentUser.tenant_id);
-        localStorage.setItem('edututor_current_tenant_id', currentUser.tenant_id);
-        setCurrentRole(currentUser.role);
-      } else {
-        setCurrentRole(currentUser.role);
-      }
-    } else {
-      localStorage.removeItem('edututor_current_user');
-    }
-  }, [currentUser]);
 
   const currentTenant = tenants.find((t) => t.id === currentTenantId) || tenants[0] || INITIAL_TENANTS[0];
 
@@ -318,6 +304,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const list = saved ? JSON.parse(saved) : INITIAL_PARENT_STUDENTS;
     return normalizeTenantList(list);
   });
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('edututor_current_user', JSON.stringify(currentUser));
+      if (currentUser.role === 'admin') {
+        setCurrentRole('admin');
+      } else if (currentUser.tenant_id && currentUser.role === 'teacher') {
+        setCurrentTenantId(currentUser.tenant_id);
+        localStorage.setItem('edututor_current_tenant_id', currentUser.tenant_id);
+        setCurrentRole(currentUser.role);
+      } else {
+        setCurrentRole(currentUser.role);
+      }
+
+      // Automatically sync activeStudentId based on logged-in user
+      if (currentUser.role === 'student') {
+        const matched = students.find((s) =>
+          s.user_id === currentUser.id ||
+          s.id === currentUser.id ||
+          `usr-stu-${s.id}` === currentUser.id ||
+          (currentUser.email && s.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+          (currentUser.name && s.fullName.toLowerCase() === currentUser.name.toLowerCase()) ||
+          (s.phone && currentUser.email && currentUser.email.includes(s.phone.replace(/\D/g, '')))
+        );
+        if (matched) {
+          setActiveStudentId(matched.id);
+          localStorage.setItem('edututor_active_student_id', matched.id);
+        }
+      } else if (currentUser.role === 'parent') {
+        const matchedPar = parents.find((p) =>
+          p.user_id === currentUser.id ||
+          p.id === currentUser.id ||
+          `usr-par-${p.id}` === currentUser.id ||
+          (currentUser.email && p.email && p.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+          (currentUser.name && p.fullName.toLowerCase() === currentUser.name.toLowerCase()) ||
+          (p.phone && currentUser.email && currentUser.email.includes(p.phone.replace(/\D/g, '')))
+        );
+        if (matchedPar) {
+          const links = parentStudents.filter((ps) => ps.parent_id === matchedPar.id);
+          if (links.length > 0) {
+            const primary = links.find((l) => l.is_primary) || links[0];
+            setActiveStudentId(primary.student_id);
+            localStorage.setItem('edututor_active_student_id', primary.student_id);
+          }
+        }
+      }
+    } else {
+      localStorage.removeItem('edututor_current_user');
+    }
+  }, [currentUser, students, parents, parentStudents]);
 
   const [accountInvitations, setAccountInvitations] = useState<AccountInvitation[]>(() => {
     const saved = localStorage.getItem('edututor_account_invitations');
@@ -1722,6 +1758,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         stu.id,
         `Học sinh ${stu.fullName} đã tự kích hoạt và thiết lập mật khẩu tài khoản thành công`
       );
+
+      setActiveStudentId(stu.id);
+      localStorage.setItem('edututor_active_student_id', stu.id);
     } else if (inv.invitation_type === 'parent' && (val.parent || inv.parent_id)) {
       const par = val.parent || parents.find((p) => p.id === inv.parent_id);
       if (par) {
@@ -1753,7 +1792,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           par.id,
           `Phụ huynh ${par.fullName} đã tự kích hoạt và thiết lập mật khẩu tài khoản thành công`
         );
+
+        const links = parentStudents.filter((ps) => ps.parent_id === par.id);
+        if (links.length > 0) {
+          const primary = links.find((l) => l.is_primary) || links[0];
+          setActiveStudentId(primary.student_id);
+          localStorage.setItem('edututor_active_student_id', primary.student_id);
+        }
       }
+    }
+
+    // Persist credentials in edututor_custom_credentials for phone, email, and ID
+    try {
+      const storedCreds: Record<string, string> = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
+      if (inv.invitation_type === 'student' && val.student) {
+        const s = val.student;
+        if (s.phone) {
+          storedCreds[s.phone.replace(/\D/g, '')] = password;
+          storedCreds[s.phone.trim()] = password;
+        }
+        if (s.email) storedCreds[s.email.toLowerCase().trim()] = password;
+        if (inv.recipient_email) storedCreds[inv.recipient_email.toLowerCase().trim()] = password;
+        if (inv.recipient_phone) storedCreds[inv.recipient_phone.replace(/\D/g, '')] = password;
+        if (s.schoolCode) storedCreds[s.schoolCode.toLowerCase().trim()] = password;
+        storedCreds[s.id] = password;
+        storedCreds[`usr-stu-${s.id}`] = password;
+        if (createdUser?.email) storedCreds[createdUser.email.toLowerCase().trim()] = password;
+      } else if (inv.invitation_type === 'parent' && (val.parent || inv.parent_id)) {
+        const p = val.parent || parents.find((item) => item.id === inv.parent_id);
+        if (p) {
+          if (p.phone) {
+            storedCreds[p.phone.replace(/\D/g, '')] = password;
+            storedCreds[p.phone.trim()] = password;
+          }
+          if (p.email) storedCreds[p.email.toLowerCase().trim()] = password;
+          if (inv.recipient_email) storedCreds[inv.recipient_email.toLowerCase().trim()] = password;
+          if (inv.recipient_phone) storedCreds[inv.recipient_phone.replace(/\D/g, '')] = password;
+          storedCreds[p.id] = password;
+          storedCreds[`usr-par-${p.id}`] = password;
+          if (createdUser?.email) storedCreds[createdUser.email.toLowerCase().trim()] = password;
+        }
+      }
+      localStorage.setItem('edututor_custom_credentials', JSON.stringify(storedCreds));
+    } catch (saveCredErr) {
+      console.warn('Could not save activated credentials:', saveCredErr);
     }
 
     confetti({

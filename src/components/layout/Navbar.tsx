@@ -85,7 +85,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
 
   const unreadCount = relevantNotifications.filter((n) => !n.isRead).length;
 
-  const currentStudent = students.find((s) => s.id === activeStudentId) || students[0];
+  const currentStudent =
+    (currentUser?.role === 'student' &&
+      students.find(
+        (s) =>
+          s.user_id === currentUser.id ||
+          s.id === currentUser.id ||
+          `usr-stu-${s.id}` === currentUser.id ||
+          (currentUser.email && s.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+          (currentUser.name && s.fullName.toLowerCase() === currentUser.name.toLowerCase()) ||
+          (s.phone && currentUser.email && currentUser.email.includes(s.phone.replace(/\D/g, '')))
+      )) ||
+    students.find((s) => s.id === activeStudentId) ||
+    students[0];
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
