@@ -324,10 +324,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
   // Handle Teacher Registration
   const handleRegisterTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regName || !regEmail || !regPassword || !regTenantName) {
-      setErrorMsg('Vui lòng điền đầy đủ các thông tin bắt buộc (*).');
+    if (!regName.trim() || !regEmail.trim() || !regPassword.trim() || !regTenantName.trim() || !regPhone.trim()) {
+      setErrorMsg('Vui lòng điền đầy đủ các thông tin bắt buộc (*), bao gồm Số điện thoại liên hệ.');
       return;
     }
+    
+    // Validate phone number format (at least 9-11 digits)
+    const cleanPhone = regPhone.replace(/\D/g, '');
+    if (cleanPhone.length < 9 || cleanPhone.length > 12) {
+      setErrorMsg('Số điện thoại liên hệ không hợp lệ. Vui lòng nhập từ 9 đến 11 số.');
+      return;
+    }
+
     if (regPassword.length < 6) {
       setErrorMsg('Mật khẩu phải từ 6 ký tự trở lên.');
       return;
@@ -340,7 +348,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
     try {
       let uid = 'usr-tchr-' + Date.now();
       try {
-        const res = await createUserWithEmailAndPassword(auth, regEmail, regPassword);
+        const res = await createUserWithEmailAndPassword(auth, regEmail.trim(), regPassword);
         uid = res.user.uid;
       } catch (authErr) {
         console.info('Using direct tenant registration mode');
@@ -357,10 +365,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
 
       // Add a new Tenant/Center
       const newTenant = addTenant({
-        name: regTenantName,
-        teacherName: regName,
-        email: regEmail,
-        phone: regPhone || '0901234567',
+        name: regTenantName.trim(),
+        teacherName: regName.trim(),
+        email: regEmail.trim(),
+        phone: regPhone.trim(),
         schoolSubject: regSubject,
       });
 
@@ -369,8 +377,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
 
       setCurrentUser({
         id: uid,
-        email: regEmail,
-        name: regName,
+        email: regEmail.trim(),
+        name: regName.trim(),
         role: 'teacher',
         tenant_id: newTenant.id,
       });
@@ -729,10 +737,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Số điện thoại liên hệ
+                    Số điện thoại liên hệ (*)
                   </label>
                   <input
                     type="tel"
+                    required
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
                     placeholder="0912 345 678"

@@ -366,8 +366,14 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
       return;
     }
 
-    if (!newTenantData.name.trim() || !newTenantData.teacherName.trim()) {
-      alert('Vui lòng nhập tên lớp/trung tâm và họ tên giáo viên!');
+    if (!newTenantData.name.trim() || !newTenantData.teacherName.trim() || !newTenantData.phone.trim()) {
+      alert('Vui lòng nhập đầy đủ Tên lớp/trung tâm, Họ tên Giáo viên và Số điện thoại liên hệ (*)!');
+      return;
+    }
+
+    const cleanPhone = newTenantData.phone.replace(/\D/g, '');
+    if (cleanPhone.length < 9 || cleanPhone.length > 12) {
+      alert('Số điện thoại liên hệ không hợp lệ. Vui lòng nhập từ 9 đến 11 chữ số!');
       return;
     }
 
@@ -1272,10 +1278,11 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    Số Điện Thoại:
+                    Số Điện Thoại (*):
                   </label>
                   <input
-                    type="text"
+                    type="tel"
+                    required
                     value={newTenantData.phone}
                     onChange={(e) => setNewTenantData({ ...newTenantData, phone: e.target.value })}
                     placeholder="0912 333 444"
