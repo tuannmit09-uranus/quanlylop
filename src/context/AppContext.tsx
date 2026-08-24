@@ -204,6 +204,7 @@ interface AppContextType {
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
   auditLogs: AuditLog[];
+  allAuditLogs?: AuditLog[];
 
   // Quick Reset
   resetToDemoData: () => void;
@@ -440,9 +441,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('edututor_audit_logs');
-    const list = saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
-    return normalizeTenantList(list);
+    try {
+      const saved = localStorage.getItem('edututor_audit_logs');
+      const savedTenantsStr = localStorage.getItem('edututor_tenants');
+      const baseTenants: Tenant[] = savedTenantsStr ? JSON.parse(savedTenantsStr) : INITIAL_TENANTS;
+      const baseLogs: AuditLog[] = saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
+
+      const normalizedLogs = normalizeTenantList(baseLogs);
+      const merged = [...normalizedLogs];
+
+      baseTenants.forEach((t) => {
+        const hasCreationLog = merged.some(
+          (l) => l.entityType === 'tenant' && l.entityId === t.id && l.action === 'create'
+        );
+        if (!hasCreationLog) {
+          merged.unshift({
+            id: `log-create-${t.id}`,
+            tenant_id: t.id,
+            actorId: t.id.startsWith('tenant-') ? `usr-${t.id}` : 'usr-teacher-1',
+            actorName: t.teacherName ? `Thầy/Cô ${t.teacherName}` : 'Người dùng / Giáo viên mới',
+            actorRole: 'teacher',
+            action: 'create',
+            entityType: 'tenant',
+            entityId: t.id,
+            description: `Đăng ký & Khởi tạo Không Gian Dạy Thêm (Tenant): "${t.name}" (Giáo viên: ${t.teacherName || 'Chưa đặt'}, Môn: ${t.schoolSubject || 'Chưa đặt'}, Email: ${t.email || 'N/A'}, SĐT: ${t.phone || 'N/A'})`,
+            newValue: JSON.stringify({
+              tenantId: t.id,
+              name: t.name,
+              teacherName: t.teacherName,
+              email: t.email,
+              phone: t.phone,
+              schoolSubject: t.schoolSubject,
+            }),
+            timestamp: t.created_at ? `${t.created_at} 08:30:00` : new Date().toLocaleString('vi-VN'),
+          });
+        }
+      });
+
+      return merged;
+    } catch {
+      return INITIAL_AUDIT_LOGS;
+    }
   });
 
   // Initialize and Sync Firebase Cloud Firestore on mount
@@ -522,7 +561,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (fStatements?.length) setBankStatements(normalizeTenantList(fStatements));
         if (fTransactions?.length) setBankTransactions(normalizeTenantList(fTransactions));
         if (fNotifications?.length) setNotifications(normalizeTenantList(fNotifications));
-        if (fAuditLogs?.length) setAuditLogs(normalizeTenantList(fAuditLogs));
+
+        // Ensure all loaded tenants have a creation audit log
+        let mergedAuditLogs = fAuditLogs?.length ? normalizeTenantList(fAuditLogs) : INITIAL_AUDIT_LOGS;
+        const allLoadedTenants = (fTenants?.length ? fTenants : INITIAL_TENANTS).filter(
+          (t) => t.id !== 'tenant-nga' && t.id !== 'tenant-mai'
+        );
+
+        allLoadedTenants.forEach((t) => {
+          const hasCreationLog = mergedAuditLogs.some(
+            (l) => l.entityType === 'tenant' && l.entityId === t.id && l.action === 'create'
+          );
+          if (!hasCreationLog) {
+            const autoLog: AuditLog = {
+              id: `log-create-${t.id}`,
+              tenant_id: t.id,
+              actorId: t.id.startsWith('tenant-') ? `usr-${t.id}` : 'usr-teacher-1',
+              actorName: t.teacherName ? `Thầy/Cô ${t.teacherName}` : 'Người dùng / Giáo viên mới',
+              actorRole: 'teacher',
+              action: 'create',
+              entityType: 'tenant',
+              entityId: t.id,
+              description: `Đăng ký & Khởi tạo Không Gian Dạy Thêm (Tenant): "${t.name}" (Giáo viên: ${t.teacherName || 'Chưa đặt'}, Môn: ${t.schoolSubject || 'Chưa đặt'}, Email: ${t.email || 'N/A'}, SĐT: ${t.phone || 'N/A'})`,
+              newValue: JSON.stringify({
+                tenantId: t.id,
+                name: t.name,
+                teacherName: t.teacherName,
+                email: t.email,
+                phone: t.phone,
+                schoolSubject: t.schoolSubject,
+              }),
+              timestamp: t.created_at ? `${t.created_at} 08:30:00` : new Date().toLocaleString('vi-VN'),
+            };
+            mergedAuditLogs = [autoLog, ...mergedAuditLogs];
+            syncSaveToFirestore('auditLogs', autoLog.id, autoLog);
+          }
+        });
+
+        setAuditLogs(mergedAuditLogs);
         console.log('Firebase Cloud Firestore synchronisation active and verified.');
       } catch (err) {
         console.warn('Firebase initial sync note:', err);
@@ -713,11 +789,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     oldValue?: string,
     newValue?: string
   ) => {
+    const isAdm = currentUser?.role === 'admin' || currentRole === 'admin';
+    const isTchr = currentRole === 'teacher';
     const newLog: AuditLog = {
-      id: `log-${Date.now()}`,
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       tenant_id: currentTenant.id,
-      actorId: currentRole === 'admin' ? (currentUser?.id || 'admin') : (currentRole === 'teacher' ? 'user-teacher' : activeStudentId),
-      actorName: currentRole === 'admin' ? 'Quản Trị Viên (Admin)' : (currentRole === 'teacher' ? currentTenant.teacherName : 'Học sinh / Phụ huynh'),
+      actorId: isAdm ? (currentUser?.id || 'admin') : (isTchr ? (currentUser?.id || 'user-teacher') : activeStudentId),
+      actorName: isAdm ? 'Quản Trị Viên (Admin)' : (isTchr ? (currentUser?.name || currentTenant.teacherName) : 'Học sinh / Phụ huynh'),
       actorRole: currentRole,
       action,
       entityType,
@@ -728,6 +806,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: new Date().toLocaleString('vi-VN'),
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    syncSaveToFirestore('auditLogs', newLog.id, newLog);
   };
 
   const switchTenant = (tenantId: string) => {
@@ -772,7 +851,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setTenants((prev) => [...prev, newTenant]);
     syncSaveToFirestore('tenants', newId, newTenant);
-    addAuditLog('create', 'tenant', newId, `Khởi tạo Tenant mới: ${newTenant.name}`);
+
+    const isAdm = currentUser?.role === 'admin' || currentRole === 'admin';
+    const actorId = isAdm ? (currentUser?.id || 'admin') : (currentUser?.id || `usr-${newId}`);
+    const actorName = isAdm ? 'Quản Trị Viên (Admin)' : (currentUser?.name || data.teacherName || 'Người dùng / Giáo viên mới');
+    const actorRole = (isAdm ? 'admin' : (currentUser?.role || 'teacher')) as UserRole;
+
+    const newLog: AuditLog = {
+      id: `log-${Date.now()}`,
+      tenant_id: newId,
+      actorId,
+      actorName,
+      actorRole,
+      action: 'create',
+      entityType: 'tenant',
+      entityId: newId,
+      description: `Đăng ký & Khởi tạo Không Gian Dạy Thêm (Tenant) mới: "${newTenant.name}" (Giáo viên: ${newTenant.teacherName || 'Chưa đặt'}, Môn: ${newTenant.schoolSubject || 'Chưa đặt'}, Email: ${newTenant.email || 'N/A'}, SĐT: ${newTenant.phone || 'N/A'})`,
+      newValue: JSON.stringify({
+        tenantId: newId,
+        name: newTenant.name,
+        teacherName: newTenant.teacherName,
+        email: newTenant.email,
+        phone: newTenant.phone,
+        schoolSubject: newTenant.schoolSubject,
+      }),
+      timestamp: new Date().toLocaleString('vi-VN'),
+    };
+    setAuditLogs((prev) => [newLog, ...prev]);
+    syncSaveToFirestore('auditLogs', newLog.id, newLog);
+
     return newTenant;
   };
 
@@ -3108,7 +3215,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const tenantBankStatements = bankStatements.filter((bs) => bs.tenant_id === currentTenant.id);
   const tenantBankTransactions = bankTransactions.filter((bt) => bt.tenant_id === currentTenant.id);
   const tenantNotifications = notifications.filter((n) => n.tenant_id === currentTenant.id || !n.tenant_id);
+  const isAdmin = currentUser?.role === 'admin' || currentRole === 'admin';
   const tenantAuditLogs = auditLogs.filter((al) => al.tenant_id === currentTenant.id);
+  const effectiveAuditLogs = isAdmin ? auditLogs : tenantAuditLogs;
 
   return (
     <AppContext.Provider
@@ -3220,7 +3329,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notifications: tenantNotifications,
         markNotificationRead,
         markAllNotificationsRead,
-        auditLogs: tenantAuditLogs,
+        auditLogs: effectiveAuditLogs,
+        allAuditLogs: auditLogs,
         resetToDemoData,
         resetData: resetToDemoData,
       }}

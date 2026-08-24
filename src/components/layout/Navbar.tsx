@@ -208,7 +208,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
 
           {/* Center / Right controls */}
           <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Quick Role Switcher Pill: Only show role buttons according to user role. For Student, show only Student; for Parent, show only Parent */}
+            {/* Quick Role Switcher Pill: Only show role buttons according to user role. For Student, show only Student; for Parent, show only Parent; for Teacher, show only Teacher; for Admin, allow switching */}
             {isStudent ? (
               <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200/80">
                 <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-indigo-700 shadow-xs flex items-center space-x-1">
@@ -221,21 +221,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                   <span>👨‍👩‍👧 Phụ huynh</span>
                 </span>
               </div>
-            ) : (
+            ) : isAdmin ? (
               <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200/80">
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => switchRole('admin')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      currentRole === 'admin'
-                        ? 'bg-purple-700 text-white shadow-xs font-bold'
-                        : 'text-purple-700 hover:text-purple-900 font-semibold'
-                    }`}
-                  >
-                    👑 Admin
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => switchRole('admin')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    currentRole === 'admin'
+                      ? 'bg-purple-700 text-white shadow-xs font-bold'
+                      : 'text-purple-700 hover:text-purple-900 font-semibold'
+                  }`}
+                >
+                  👑 Admin
+                </button>
                 <button
                   type="button"
                   onClick={() => switchRole('teacher')}
@@ -269,6 +267,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                 >
                   🎒 Học sinh
                 </button>
+              </div>
+            ) : (
+              /* Teacher role (non-admin): Only show "Giáo viên", no Parent or Student buttons */
+              <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200/80">
+                <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-blue-700 shadow-xs flex items-center space-x-1">
+                  <span>👨‍🏫 Giáo viên</span>
+                </span>
               </div>
             )}
 

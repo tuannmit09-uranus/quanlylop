@@ -66,7 +66,7 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
 
   const isAdmin = currentUser?.role === 'admin' || currentRole === 'admin';
 
-  // Selected Tenant to edit (default to current active tenant, teacher only edits their own)
+  // Selected Tenant to edit (default to current active tenant)
   const [editingTenantId, setEditingTenantId] = useState<string>(currentTenant.id);
 
   // Form State
@@ -107,14 +107,12 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
     avatar: PRESET_AVATARS[0],
   });
 
-  // If not admin, always force editingTenantId to currentTenant.id
+  // Always synchronize editingTenantId whenever active currentTenant changes (from Navbar or switchTenant)
   useEffect(() => {
-    if (!isAdmin) {
-      setEditingTenantId(currentTenant.id);
-    }
-  }, [isAdmin, currentTenant.id]);
+    setEditingTenantId(currentTenant.id);
+  }, [currentTenant.id]);
 
-  // Sync state when editingTenantId or currentTenant changes
+  // Sync form inputs when editingTenantId or tenants list or currentTenant updates
   useEffect(() => {
     const target = tenants.find((t) => t.id === editingTenantId) || currentTenant;
     setName(target.name);
@@ -123,6 +121,12 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
     setEmail(target.email || '');
     setSchoolSubject(target.schoolSubject || '');
     setAvatar(target.avatar || '');
+    // Reset password fields and notices on tenant switch
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setPasswordSuccess('');
   }, [editingTenantId, currentTenant, tenants]);
 
   // Process and optimize uploaded image file
@@ -444,6 +448,11 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
 
   // For teachers: only display their own single tenant in the directory
   const displayedTenants = isAdmin ? tenants : tenants.filter((t) => t.id === currentTenant.id);
+
+  const handleSelectTenant = (tenantId: string) => {
+    setEditingTenantId(tenantId);
+    switchTenant(tenantId);
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -1079,8 +1088,15 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
                 return (
                   <div
                     key={t.id}
+                    onClick={() => {
+                      if (isAdmin) {
+                        handleSelectTenant(t.id);
+                      }
+                    }}
                     className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
-                      isBeingEdited
+                      isAdmin ? 'cursor-pointer' : ''
+                    } ${
+                      isCurrentActive || isBeingEdited
                         ? 'bg-blue-50/80 border-blue-400 shadow-xs ring-1 ring-blue-300'
                         : 'bg-slate-50 border-slate-200/80 hover:bg-slate-100/80'
                     }`}
@@ -1109,28 +1125,28 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
                         ID: {t.id}
                       </span>
 
-                      <div className="flex items-center space-x-1.5">
+                      <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
                         {isAdmin ? (
                           <>
                             <button
                               type="button"
-                              onClick={() => setEditingTenantId(t.id)}
-                              className={`px-2 py-1 rounded-lg font-semibold text-[11px] transition-colors flex items-center space-x-1 ${
-                                isBeingEdited
+                              onClick={() => handleSelectTenant(t.id)}
+                              className={`px-2 py-1 rounded-lg font-semibold text-[11px] transition-colors flex items-center space-x-1 cursor-pointer ${
+                                isCurrentActive || isBeingEdited
                                   ? 'bg-blue-600 text-white font-bold'
                                   : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
                               }`}
                             >
                               <Edit3 className="w-3 h-3" />
-                              <span>{isBeingEdited ? 'Đang sửa' : 'Chọn sửa'}</span>
+                              <span>{isCurrentActive || isBeingEdited ? 'Đang xem/sửa' : 'Chọn xem & sửa'}</span>
                             </button>
 
                             {!isCurrentActive && (
                               <button
                                 type="button"
-                                onClick={() => switchTenant(t.id)}
-                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold rounded-lg text-[11px] transition-colors border border-emerald-200"
-                                title="Chuyển không gian làm việc"
+                                onClick={() => handleSelectTenant(t.id)}
+                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold rounded-lg text-[11px] transition-colors border border-emerald-200 cursor-pointer"
+                                title="Kích hoạt và xem dữ liệu Tenant này"
                               >
                                 Kích hoạt
                               </button>
@@ -1139,7 +1155,10 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
                             {tenants.length > 1 && (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteTenant(t)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteTenant(t);
+                                }}
                                 className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                                 title="Xóa Tenant này (Chỉ Admin)"
                               >

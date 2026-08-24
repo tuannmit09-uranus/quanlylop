@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { VIETNAMESE_BANKS, formatVND, getVietQRUrl } from '../../utils/vietqr';
 import {
@@ -41,6 +41,15 @@ export const PaymentSettingsPage: React.FC = () => {
   const [branch, setBranch] = useState(paymentAccount.branch || 'Hà Nội');
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Sync state when paymentAccount or currentTenant changes
+  useEffect(() => {
+    setBankCode(paymentAccount.bankCode || 'VCB');
+    setBankName(paymentAccount.bankName || 'Vietcombank');
+    setAccountNumber(paymentAccount.accountNumber || '0123456789');
+    setAccountName(paymentAccount.accountName || 'NGUYEN VAN TUAN');
+    setBranch(paymentAccount.branch || 'Hà Nội');
+  }, [paymentAccount, currentTenant.id]);
 
   // Live Test QR State
   const [testAmount, setTestAmount] = useState(800000);
