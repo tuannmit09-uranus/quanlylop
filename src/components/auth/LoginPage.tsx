@@ -141,9 +141,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
       targetTenantId = matchedTenant.id;
     } else if (normalizedInput === 'tonga190984@gmail.com') {
       effectiveRole = 'teacher';
-      const existingT = tenants.find((t) => t.email && t.email.toLowerCase().trim() === 'tonga190984@gmail.com');
+      const existingT =
+        tenants.find((t) => t.email && t.email.toLowerCase().trim() === 'tonga190984@gmail.com') ||
+        tenants.find((t) => t.id === 'tenant-tonga');
       effectiveName = existingT?.teacherName || 'Cô Tống Nga';
-      if (existingT) targetTenantId = existingT.id;
+      targetTenantId = existingT ? existingT.id : 'tenant-tonga';
     } else if (
       normalizedInput === 'thaytuan.math@edututor.vn' ||
       normalizedInput === 'teacher.an@edututor.vn' ||

@@ -221,10 +221,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (saved) {
       try {
         const parsed: Tenant[] = JSON.parse(saved);
-        const cleaned = parsed.filter((t) => t.id !== 'tenant-nga' && t.id !== 'tenant-mai');
+        const cleaned = parsed.filter((t) => t.id !== 'tenant-mai');
         if (cleaned.length > 0) {
           const hasTuan = cleaned.some((t) => t.id === 'tenant-tuan');
-          return hasTuan ? cleaned : [INITIAL_TENANTS[0], ...cleaned];
+          const hasTonga = cleaned.some(
+            (t) => t.id === 'tenant-tonga' || (t.email && t.email.toLowerCase().trim() === 'tonga190984@gmail.com')
+          );
+          let res = hasTuan ? cleaned : [INITIAL_TENANTS[0], ...cleaned];
+          if (!hasTonga) {
+            res = [...res, INITIAL_TENANTS[1]];
+          }
+          return res;
         }
       } catch {}
     }
@@ -233,7 +240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [currentTenantId, setCurrentTenantId] = useState<string>(() => {
     const saved = localStorage.getItem('edututor_current_tenant_id');
-    return (saved && saved !== 'tenant-nga' && saved !== 'tenant-mai') ? saved : 'tenant-tuan';
+    return (saved && saved !== 'tenant-mai') ? saved : 'tenant-tuan';
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>('teacher');
@@ -264,7 +271,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const normalizeTenantList = <T extends { tenant_id?: string }>(items: T[]): T[] => {
     return items.map((item) => {
-      if (!item.tenant_id || item.tenant_id === 'tenant-nga' || item.tenant_id === 'tenant-mai') {
+      if (!item.tenant_id) {
         return { ...item, tenant_id: 'tenant-tuan' };
       }
       return item;
@@ -285,26 +292,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [classes, setClasses] = useState<ClassRoom[]>(() => {
     const saved = localStorage.getItem('edututor_classes');
-    const list = saved ? JSON.parse(saved) : INITIAL_CLASSES;
-    return normalizeTenantList(list);
+    const list: ClassRoom[] = saved ? JSON.parse(saved) : INITIAL_CLASSES;
+    const filtered = list.filter((c) => c.tenant_id !== 'tenant-tuan' && c.tenant_id !== 'tenant-tonga' && c.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
+  // Students list: ensure fresh clean list for teachers
   const [students, setStudents] = useState<Student[]>(() => {
     const saved = localStorage.getItem('edututor_students');
-    const list = saved ? JSON.parse(saved) : INITIAL_STUDENTS;
-    return normalizeTenantList(list);
+    const list: Student[] = saved ? JSON.parse(saved) : INITIAL_STUDENTS;
+    const filtered = list.filter((s) => s.tenant_id !== 'tenant-tuan' && s.tenant_id !== 'tenant-tonga' && s.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
+  // Parents list: ensure fresh clean list for teachers
   const [parents, setParents] = useState<Parent[]>(() => {
     const saved = localStorage.getItem('edututor_parents');
-    const list = saved ? JSON.parse(saved) : INITIAL_PARENTS;
-    return normalizeTenantList(list);
+    const list: Parent[] = saved ? JSON.parse(saved) : INITIAL_PARENTS;
+    const filtered = list.filter((p) => p.tenant_id !== 'tenant-tuan' && p.tenant_id !== 'tenant-tonga' && p.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
+  // ParentStudents link list: ensure fresh clean list for teachers
   const [parentStudents, setParentStudents] = useState<ParentStudent[]>(() => {
     const saved = localStorage.getItem('edututor_parent_students');
-    const list = saved ? JSON.parse(saved) : INITIAL_PARENT_STUDENTS;
-    return normalizeTenantList(list);
+    const list: ParentStudent[] = saved ? JSON.parse(saved) : INITIAL_PARENT_STUDENTS;
+    const filtered = list.filter((ps) => ps.tenant_id !== 'tenant-tuan' && ps.tenant_id !== 'tenant-tonga' && ps.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   useEffect(() => {
@@ -359,86 +373,93 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [accountInvitations, setAccountInvitations] = useState<AccountInvitation[]>(() => {
     const saved = localStorage.getItem('edututor_account_invitations');
-    const list = saved ? JSON.parse(saved) : INITIAL_ACCOUNT_INVITATIONS;
-    return normalizeTenantList(list);
+    const list: AccountInvitation[] = saved ? JSON.parse(saved) : INITIAL_ACCOUNT_INVITATIONS;
+    const filtered = list.filter((inv) => inv.tenant_id !== 'tenant-tuan' && inv.tenant_id !== 'tenant-tonga' && inv.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [recurringSchedules, setRecurringSchedules] = useState<RecurringSchedule[]>(() => {
     const saved = localStorage.getItem('edututor_schedules');
-    const list = saved ? JSON.parse(saved) : INITIAL_RECURRING_SCHEDULES;
-    return normalizeTenantList(list);
+    const list: RecurringSchedule[] = saved ? JSON.parse(saved) : INITIAL_RECURRING_SCHEDULES;
+    const filtered = list.filter((rs) => rs.tenant_id !== 'tenant-tuan' && rs.tenant_id !== 'tenant-tonga' && rs.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [lessonSessions, setLessonSessions] = useState<LessonSession[]>(() => {
     const saved = localStorage.getItem('edututor_sessions');
-    const list = saved ? JSON.parse(saved) : INITIAL_LESSON_SESSIONS;
-    return normalizeTenantList(list);
+    const list: LessonSession[] = saved ? JSON.parse(saved) : INITIAL_LESSON_SESSIONS;
+    const filtered = list.filter((ls) => ls.tenant_id !== 'tenant-tuan' && ls.tenant_id !== 'tenant-tonga' && ls.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [lessons, setLessons] = useState<Lesson[]>(() => {
     const saved = localStorage.getItem('edututor_lessons');
-    const list = saved ? JSON.parse(saved) : INITIAL_LESSONS;
-    return normalizeTenantList(list);
+    const list: Lesson[] = saved ? JSON.parse(saved) : INITIAL_LESSONS;
+    const filtered = list.filter((l) => l.tenant_id !== 'tenant-tuan' && l.tenant_id !== 'tenant-tonga' && l.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
     const saved = localStorage.getItem('edututor_attendance');
-    const list = saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
-    return normalizeTenantList(list);
+    const list: AttendanceRecord[] = saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
+    const filtered = list.filter((a) => a.tenant_id !== 'tenant-tuan' && a.tenant_id !== 'tenant-tonga' && a.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [evaluations, setEvaluations] = useState<StudentEvaluation[]>(() => {
     const saved = localStorage.getItem('edututor_evaluations');
-    const list = saved ? JSON.parse(saved) : INITIAL_EVALUATIONS;
-    return normalizeTenantList(list);
+    const list: StudentEvaluation[] = saved ? JSON.parse(saved) : INITIAL_EVALUATIONS;
+    const filtered = list.filter((e) => e.tenant_id !== 'tenant-tuan' && e.tenant_id !== 'tenant-tonga' && e.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [homeworks, setHomeworks] = useState<Homework[]>(() => {
     const saved = localStorage.getItem('edututor_homeworks');
-    const list = saved ? JSON.parse(saved) : INITIAL_HOMEWORK;
-    return normalizeTenantList(list);
+    const list: Homework[] = saved ? JSON.parse(saved) : INITIAL_HOMEWORK;
+    const filtered = list.filter((h) => h.tenant_id !== 'tenant-tuan' && h.tenant_id !== 'tenant-tonga' && h.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [submissions, setSubmissions] = useState<HomeworkSubmission[]>(() => {
     const saved = localStorage.getItem('edututor_submissions');
-    const list = saved ? JSON.parse(saved) : INITIAL_SUBMISSIONS;
-    return normalizeTenantList(list);
+    const list: HomeworkSubmission[] = saved ? JSON.parse(saved) : INITIAL_SUBMISSIONS;
+    const filtered = list.filter((s) => s.tenant_id !== 'tenant-tuan' && s.tenant_id !== 'tenant-tonga' && s.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [comments, setComments] = useState<CommentItem[]>(() => {
     const saved = localStorage.getItem('edututor_comments');
-    const list = saved ? JSON.parse(saved) : INITIAL_COMMENTS;
-    return normalizeTenantList(list);
+    const list: CommentItem[] = saved ? JSON.parse(saved) : INITIAL_COMMENTS;
+    const filtered = list.filter((c) => c.tenant_id !== 'tenant-tuan' && c.tenant_id !== 'tenant-tonga' && c.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [tuitionItems, setTuitionItems] = useState<TuitionItem[]>(() => {
     const saved = localStorage.getItem('edututor_tuitions');
     const items: TuitionItem[] = saved ? JSON.parse(saved) : INITIAL_TUITION_ITEMS;
-    const mapped = items.map((t) => {
-      if (t.classId && !t.id.includes(t.classId)) {
-        return { ...t, id: `tui-${t.studentId}-${t.classId}-${t.periodMonth}${t.periodYear}` };
-      }
-      return t;
-    });
-    return normalizeTenantList(mapped);
+    const filtered = items.filter((t) => t.tenant_id !== 'tenant-tuan' && t.tenant_id !== 'tenant-tonga' && t.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [bankStatements, setBankStatements] = useState<BankStatement[]>(() => {
     const saved = localStorage.getItem('edututor_bank_statements');
-    const list = saved ? JSON.parse(saved) : [INITIAL_BANK_STATEMENT];
-    return normalizeTenantList(list);
+    const list: BankStatement[] = saved ? JSON.parse(saved) : [];
+    const filtered = list.filter((bs) => bs.tenant_id !== 'tenant-tuan' && bs.tenant_id !== 'tenant-tonga' && bs.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>(() => {
     const saved = localStorage.getItem('edututor_bank_transactions');
-    const list = saved ? JSON.parse(saved) : INITIAL_BANK_TRANSACTIONS;
-    return normalizeTenantList(list);
+    const list: BankTransaction[] = saved ? JSON.parse(saved) : INITIAL_BANK_TRANSACTIONS;
+    const filtered = list.filter((bt) => bt.tenant_id !== 'tenant-tuan' && bt.tenant_id !== 'tenant-tonga' && bt.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     const saved = localStorage.getItem('edututor_notifications');
-    const list = saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-    return normalizeTenantList(list);
+    const list: NotificationItem[] = saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    const filtered = list.filter((n) => n.tenant_id !== 'tenant-tuan' && n.tenant_id !== 'tenant-tonga' && n.tenant_id !== 'tenant-nga');
+    return normalizeTenantList(filtered);
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
@@ -538,35 +559,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ]);
 
         if (fTenants?.length) {
-          const cleanedTenants = fTenants.filter((t) => t.id !== 'tenant-nga' && t.id !== 'tenant-mai');
-          if (cleanedTenants.length > 0) {
-            setTenants(cleanedTenants);
-          }
+          const cleanedTenants = fTenants.filter((t) => t.id !== 'tenant-mai');
+          const hasTonga = cleanedTenants.some(
+            (t) => t.id === 'tenant-tonga' || (t.email && t.email.toLowerCase().trim() === 'tonga190984@gmail.com')
+          );
+          const finalTenants = hasTonga ? cleanedTenants : [...cleanedTenants, INITIAL_TENANTS[1]];
+          setTenants(finalTenants);
         }
         if (fSchools?.length) setSchools(normalizeTenantList(fSchools));
         if (fSubjects?.length) setSubjects(normalizeTenantList(fSubjects));
-        if (fClasses?.length) setClasses(normalizeTenantList(fClasses));
-        if (fStudents?.length) setStudents(normalizeTenantList(fStudents));
-        if (fParents?.length) setParents(normalizeTenantList(fParents));
-        if (fParentStudents?.length) setParentStudents(normalizeTenantList(fParentStudents));
-        if (fAccountInvitations?.length) setAccountInvitations(normalizeTenantList(fAccountInvitations));
-        if (fSchedules?.length) setRecurringSchedules(normalizeTenantList(fSchedules));
-        if (fSessions?.length) setLessonSessions(normalizeTenantList(fSessions));
-        if (fLessons?.length) setLessons(normalizeTenantList(fLessons));
-        if (fAttendance?.length) setAttendance(normalizeTenantList(fAttendance));
-        if (fEvaluations?.length) setEvaluations(normalizeTenantList(fEvaluations));
-        if (fHomeworks?.length) setHomeworks(normalizeTenantList(fHomeworks));
-        if (fSubmissions?.length) setSubmissions(normalizeTenantList(fSubmissions));
-        if (fComments?.length) setComments(normalizeTenantList(fComments));
-        if (fTuitions?.length) setTuitionItems(normalizeTenantList(fTuitions));
-        if (fStatements?.length) setBankStatements(normalizeTenantList(fStatements));
-        if (fTransactions?.length) setBankTransactions(normalizeTenantList(fTransactions));
-        if (fNotifications?.length) setNotifications(normalizeTenantList(fNotifications));
+
+        // Purge legacy mock data for tenant-tuan and tenant-tonga across all operational tables
+        const purgeCollections = [
+          { name: 'classes', items: fClasses, setter: setClasses },
+          { name: 'students', items: fStudents, setter: setStudents },
+          { name: 'parents', items: fParents, setter: setParents },
+          { name: 'parent_students', items: fParentStudents, setter: setParentStudents },
+          { name: 'account_invitations', items: fAccountInvitations, setter: setAccountInvitations },
+          { name: 'schedules', items: fSchedules, setter: setRecurringSchedules },
+          { name: 'sessions', items: fSessions, setter: setLessonSessions },
+          { name: 'lessons', items: fLessons, setter: setLessons },
+          { name: 'attendance', items: fAttendance, setter: setAttendance },
+          { name: 'evaluations', items: fEvaluations, setter: setEvaluations },
+          { name: 'homeworks', items: fHomeworks, setter: setHomeworks },
+          { name: 'submissions', items: fSubmissions, setter: setSubmissions },
+          { name: 'comments', items: fComments, setter: setComments },
+          { name: 'tuitions', items: fTuitions, setter: setTuitionItems },
+          { name: 'bankStatements', items: fStatements, setter: setBankStatements },
+          { name: 'bankTransactions', items: fTransactions, setter: setBankTransactions },
+          { name: 'notifications', items: fNotifications, setter: setNotifications },
+        ];
+
+        purgeCollections.forEach(({ name, items, setter }) => {
+          if (items && items.length > 0) {
+            const obsoleteItems = items.filter(
+              (item: any) =>
+                item.tenant_id === 'tenant-tuan' ||
+                item.tenant_id === 'tenant-tonga' ||
+                item.tenant_id === 'tenant-nga' ||
+                !item.tenant_id
+            );
+            obsoleteItems.forEach((item: any) => syncDeleteFromFirestore(name, item.id));
+
+            const validItems = items.filter(
+              (item: any) =>
+                item.tenant_id &&
+                item.tenant_id !== 'tenant-tuan' &&
+                item.tenant_id !== 'tenant-tonga' &&
+                item.tenant_id !== 'tenant-nga'
+            );
+            setter(normalizeTenantList(validItems));
+          } else {
+            setter([]);
+          }
+        });
 
         // Ensure all loaded tenants have a creation audit log
         let mergedAuditLogs = fAuditLogs?.length ? normalizeTenantList(fAuditLogs) : INITIAL_AUDIT_LOGS;
         const allLoadedTenants = (fTenants?.length ? fTenants : INITIAL_TENANTS).filter(
-          (t) => t.id !== 'tenant-nga' && t.id !== 'tenant-mai'
+          (t) => t.id !== 'tenant-mai'
         );
 
         allLoadedTenants.forEach((t) => {
@@ -604,6 +655,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch (err) {
         console.warn('Firebase initial sync note:', err);
       }
+    }
+
+    // Clean any legacy/orphan student, class and operational records for tenant-tuan and tenant-tonga in localStorage
+    try {
+      const keysToClean = [
+        'edututor_classes',
+        'edututor_students',
+        'edututor_parents',
+        'edututor_parent_students',
+        'edututor_account_invitations',
+        'edututor_schedules',
+        'edututor_sessions',
+        'edututor_lessons',
+        'edututor_attendance',
+        'edututor_evaluations',
+        'edututor_homeworks',
+        'edututor_submissions',
+        'edututor_comments',
+        'edututor_tuitions',
+        'edututor_bank_statements',
+        'edututor_bank_transactions',
+        'edututor_notifications',
+      ];
+      keysToClean.forEach((key) => {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const parsed: any[] = JSON.parse(stored);
+          const filtered = parsed.filter(
+            (item) =>
+              item.tenant_id &&
+              item.tenant_id !== 'tenant-tuan' &&
+              item.tenant_id !== 'tenant-tonga' &&
+              item.tenant_id !== 'tenant-nga'
+          );
+          localStorage.setItem(key, JSON.stringify(filtered));
+        }
+      });
+    } catch {
+      //
     }
 
     // Initialize and merge default custom credentials
