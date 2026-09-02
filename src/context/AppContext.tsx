@@ -53,6 +53,7 @@ import {
   INITIAL_BANK_TRANSACTIONS,
   INITIAL_NOTIFICATIONS,
   INITIAL_AUDIT_LOGS,
+  DEFAULT_CUSTOM_CREDENTIALS,
 } from '../data/initialData';
 import { generatePaymentReference, removeVietnameseAccents } from '../utils/vietqr';
 import { testFirebaseConnection } from '../lib/firebase';
@@ -603,6 +604,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch (err) {
         console.warn('Firebase initial sync note:', err);
       }
+    }
+
+    // Initialize and merge default custom credentials
+    try {
+      const existing = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
+      const merged = { ...DEFAULT_CUSTOM_CREDENTIALS, ...existing };
+      // Ensure tonga190984@gmail.com has 123456a@ if not explicitly overridden
+      if (!existing['tonga190984@gmail.com']) {
+        merged['tonga190984@gmail.com'] = '123456a@';
+      }
+      localStorage.setItem('edututor_custom_credentials', JSON.stringify(merged));
+    } catch {
+      //
     }
 
     initFirestoreData();

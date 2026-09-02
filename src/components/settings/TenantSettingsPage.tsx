@@ -285,7 +285,9 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
     } catch {
       storedCreds = {};
     }
-    const expectedCurrentPass = storedCreds[userEmail] || '123456';
+    const expectedCurrentPass =
+      storedCreds[userEmail] ||
+      (userEmail === 'tonga190984@gmail.com' ? '123456a@' : '123456');
 
     if (currentPassword && currentPassword !== expectedCurrentPass) {
       setPasswordError('Mật khẩu hiện tại không chính xác. Vui lòng kiểm tra lại.');

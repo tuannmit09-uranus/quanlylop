@@ -112,6 +112,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return isPhoneMatch || isEmailMatch;
     });
 
+    // 4. Identify if this matches a Teacher / Tenant in data
+    const matchedTenant = tenants.find((t) => {
+      const isEmailMatch = t.email && t.email.toLowerCase().trim() === normalizedInput;
+      const tPhoneDigits = (t.phone || '').replace(/\D/g, '');
+      const isPhoneMatch = phoneDigits.length >= 8 && tPhoneDigits.length >= 8 && (tPhoneDigits === phoneDigits || tPhoneDigits.endsWith(phoneDigits) || phoneDigits.endsWith(tPhoneDigits));
+      return isEmailMatch || isPhoneMatch;
+    });
+
     let effectiveRole: UserRole = loginRole;
     let effectiveName = rawInput;
     let targetTenantId = currentTenant.id;
@@ -127,6 +135,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       effectiveRole = 'parent';
       effectiveName = matchedParent.fullName;
       if (matchedParent.tenant_id) targetTenantId = matchedParent.tenant_id;
+    } else if (matchedTenant) {
+      effectiveRole = 'teacher';
+      effectiveName = matchedTenant.teacherName || 'Giáo viên';
+      targetTenantId = matchedTenant.id;
+    } else if (normalizedInput === 'tonga190984@gmail.com') {
+      effectiveRole = 'teacher';
+      const existingT = tenants.find((t) => t.email && t.email.toLowerCase().trim() === 'tonga190984@gmail.com');
+      effectiveName = existingT?.teacherName || 'Cô Tống Nga';
+      if (existingT) targetTenantId = existingT.id;
     } else if (
       normalizedInput === 'thaytuan.math@edututor.vn' ||
       normalizedInput === 'teacher.an@edututor.vn' ||
@@ -155,11 +172,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // Check custom credentials or known accounts
-    let storedCreds: Record<string, string> = {};
+    let storedCreds: Record<string, string> = {
+      'tonga190984@gmail.com': '123456a@',
+    };
     try {
-      storedCreds = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
+      const custom = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
+      storedCreds = { ...storedCreds, ...custom };
     } catch {
-      storedCreds = {};
+      //
     }
 
     const hasCustomPassword =
@@ -169,11 +189,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       (matchedStudent ? storedCreds[matchedStudent.id] || storedCreds[matchedStudent.schoolCode?.toLowerCase()] : undefined) ||
       (matchedParent ? storedCreds[matchedParent.id] : undefined);
 
-    const isMatchKnown = !!matchedStudent || !!matchedParent || hasCustomPassword;
+    const isMatchKnown =
+      !!matchedStudent ||
+      !!matchedParent ||
+      !!matchedTenant ||
+      normalizedInput === 'tonga190984@gmail.com' ||
+      hasCustomPassword;
 
     if (hasCustomPassword || isMatchKnown) {
-      const expectedPassword = hasCustomPassword || '123456';
-      if (loginPassword === expectedPassword || loginPassword === '123456' || (loginPassword.length >= 6 && isMatchKnown)) {
+      const expectedPassword = hasCustomPassword || (normalizedInput === 'tonga190984@gmail.com' ? '123456a@' : '123456');
+      const isPasswordCorrect =
+        loginPassword === expectedPassword ||
+        (!hasCustomPassword && (loginPassword === '123456' || (loginPassword.length >= 6 && isMatchKnown)));
+
+      if (isPasswordCorrect) {
         if (targetTenantId && targetTenantId !== currentTenant.id) {
           switchTenant(targetTenantId);
         }

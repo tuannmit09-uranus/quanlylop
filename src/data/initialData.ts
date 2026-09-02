@@ -1800,3 +1800,9 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [
     timestamp: '2026-01-11 09:15:00',
   },
 ];
+
+export const DEFAULT_CUSTOM_CREDENTIALS: Record<string, string> = {
+  'tonga190984@gmail.com': '123456a@',
+  'tuannmit09@gmail.com': '123456',
+  'thaytuan.math@edututor.vn': '123456',
+};
