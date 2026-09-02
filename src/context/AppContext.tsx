@@ -1092,7 +1092,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (target) syncSaveToFirestore('classes', id, target);
       return updated;
     });
-    addAuditLog('update', 'class', id, `Cập nhật lớp học ID ${id}`);
+
+    if (data.name) {
+      setRecurringSchedules((prev) => {
+        const updated = prev.map((s) => (s.classId === id ? { ...s, className: data.name! } : s));
+        updated.forEach((s) => {
+          if (s.classId === id) syncSaveToFirestore('recurringSchedules', s.id, s);
+        });
+        return updated;
+      });
+      setLessonSessions((prev) => {
+        const updated = prev.map((s) => (s.classId === id ? { ...s, className: data.name! } : s));
+        updated.forEach((s) => {
+          if (s.classId === id) syncSaveToFirestore('lessonSessions', s.id, s);
+        });
+        return updated;
+      });
+    }
+
+    const classDesc = data.name ? ` (${data.name})` : '';
+    const roomDesc = data.room !== undefined ? ` • Phòng: ${data.room || 'Chưa xếp'}` : '';
+    addAuditLog('update', 'class', id, `Cập nhật thông tin lớp học${classDesc}${roomDesc}`);
   };
 
   const deleteClass = (id: string) => {

@@ -36,7 +36,7 @@ export const ClassManager: React.FC = () => {
   const [gradeLevel, setGradeLevel] = useState('Khối lớp 10');
   const [feePerSession, setFeePerSession] = useState(100000);
   const [description, setDescription] = useState('');
-  const [room, setRoom] = useState('Phòng 201');
+  const [room, setRoom] = useState('');
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -45,7 +45,7 @@ export const ClassManager: React.FC = () => {
     setGradeLevel('Khối lớp 10');
     setFeePerSession(100000);
     setDescription('');
-    setRoom('Phòng 201');
+    setRoom('');
     setShowModal(true);
   };
 
@@ -56,7 +56,7 @@ export const ClassManager: React.FC = () => {
     setGradeLevel(c.gradeLevel || 'Khối lớp 10');
     setFeePerSession(c.feePerSession);
     setDescription(c.description || '');
-    setRoom(c.room || 'Phòng 201');
+    setRoom(c.room || '');
     setShowModal(true);
   };
 
@@ -69,25 +69,25 @@ export const ClassManager: React.FC = () => {
 
     if (editingId) {
       updateClass(editingId, {
-        name,
+        name: name.trim(),
         subjectId,
         subjectName: subName,
         gradeLevel,
         feePerSession: Number(feePerSession),
-        description,
-        room,
+        description: description.trim(),
+        room: room.trim(),
       });
     } else {
       addClass({
-        name,
+        name: name.trim(),
         subjectId,
         subjectName: subName,
         gradeLevel,
         feePerSession: Number(feePerSession),
-        description,
+        description: description.trim(),
         studentIds: [],
         status: 'active',
-        room,
+        room: room.trim(),
       });
     }
     setShowModal(false);
@@ -147,7 +147,7 @@ export const ClassManager: React.FC = () => {
                 </p>
 
                 <div className="text-xs text-slate-500 flex items-center justify-between">
-                  <span>Phòng học: <strong>{cls.room || 'Phòng 201'}</strong></span>
+                  <span>Phòng học: <strong className="text-slate-800">{cls.room ? cls.room : 'Chưa xếp phòng'}</strong></span>
                   <span>Sĩ số: <strong className="text-blue-700">{cls.studentIds.length} học sinh</strong></span>
                 </div>
               </div>

@@ -257,7 +257,7 @@ export const EvaluationManager: React.FC<EvaluationManagerProps> = ({
               ))}
             </select>
             <p className="text-[11px] text-slate-500 mt-1.5">
-              Phòng: {currentClass?.room || 'Phòng 201'} • Đơn giá: {currentClass?.feePerSession?.toLocaleString('vi-VN')} đ/buổi
+              Phòng: {currentClass?.room || 'Chưa xếp phòng'} • Đơn giá: {currentClass?.feePerSession?.toLocaleString('vi-VN')} đ/buổi
             </p>
           </div>
 

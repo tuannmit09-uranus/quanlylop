@@ -360,7 +360,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                   <span>Sĩ số: {cls.studentIds.length} học sinh</span>
-                  <span>{cls.room || 'Phòng 201'}</span>
+                  <span>{cls.room || 'Chưa xếp phòng'}</span>
                 </div>
               </div>
             ))}
