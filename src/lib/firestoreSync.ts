@@ -67,3 +67,73 @@ export async function syncDeleteFromFirestore(collectionName: string, id: string
     console.warn(`Failed to sync delete ${collectionName}/${id} from Firestore:`, err);
   }
 }
+
+/**
+ * Subscribe to real-time updates from a Firestore collection
+ */
+export function subscribeToCollection<T extends { id: string }>(
+  collectionName: string,
+  onUpdate: (items: T[]) => void
+): () => void {
+  try {
+    const colRef = collection(db, collectionName);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items: T[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({ ...(docSnap.data() as T), id: docSnap.id });
+        });
+        onUpdate(items);
+      },
+      (error) => {
+        console.warn(`Firestore real-time listener error for ${collectionName}:`, error);
+      }
+    );
+  } catch (error) {
+    console.warn(`Could not attach Firestore listener for ${collectionName}:`, error);
+    return () => {};
+  }
+}
+
+/**
+ * Fetch all documents in a collection once
+ */
+export async function fetchCollectionFromFirestore<T extends { id: string }>(
+  collectionName: string
+): Promise<T[]> {
+  try {
+    const colRef = collection(db, collectionName);
+    const snapshot = await getDocs(colRef);
+    const items: T[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ ...(docSnap.data() as T), id: docSnap.id });
+    });
+    return items;
+  } catch (error) {
+    console.warn(`Failed to fetch collection ${collectionName} from Firestore:`, error);
+    return [];
+  }
+}
+
+/**
+ * Wipe all documents from specified Firestore collections
+ */
+export async function clearAllFirestoreCollections(collectionNames: string[]): Promise<void> {
+  for (const name of collectionNames) {
+    try {
+      const colRef = collection(db, name);
+      const snapshot = await getDocs(colRef);
+      if (!snapshot.empty) {
+        const batch = writeBatch(db);
+        snapshot.forEach((docSnap) => {
+          batch.delete(docSnap.ref);
+        });
+        await batch.commit();
+        console.log(`Cleared all documents in Firestore collection: ${name}`);
+      }
+    } catch (err) {
+      console.warn(`Failed to clear Firestore collection ${name}:`, err);
+    }
+  }
+}

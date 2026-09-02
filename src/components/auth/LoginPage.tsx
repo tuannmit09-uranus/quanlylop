@@ -139,29 +139,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
       effectiveRole = 'teacher';
       effectiveName = matchedTenant.teacherName || 'Giáo viên';
       targetTenantId = matchedTenant.id;
-    } else if (normalizedInput === 'tonga190984@gmail.com') {
-      effectiveRole = 'teacher';
-      const existingT =
-        tenants.find((t) => t.email && t.email.toLowerCase().trim() === 'tonga190984@gmail.com') ||
-        tenants.find((t) => t.id === 'tenant-tonga');
-      effectiveName = existingT?.teacherName || 'Cô Tống Nga';
-      targetTenantId = existingT ? existingT.id : 'tenant-tonga';
-    } else if (
-      normalizedInput === 'thaytuan.math@edututor.vn' ||
-      normalizedInput === 'teacher.an@edututor.vn' ||
-      normalizedInput === 'teacher.tuan@edututor.vn'
-    ) {
-      effectiveRole = 'teacher';
-      effectiveName = 'Thầy Nguyễn Văn Tuấn';
-      targetTenantId = 'tenant-tuan';
-    } else if (normalizedInput === 'parent.tuan@gmail.com') {
-      effectiveRole = 'parent';
-      effectiveName = 'Phụ huynh em Nguyễn Minh Tuấn';
-      targetTenantId = 'tenant-tuan';
-    } else if (normalizedInput === 'student.tuan@edututor.vn') {
-      effectiveRole = 'student';
-      effectiveName = 'Học sinh Nguyễn Minh Tuấn';
-      targetTenantId = 'tenant-tuan';
     } else if (loginRole === 'student') {
       effectiveRole = 'student';
       effectiveName = rawInput.includes('@') ? rawInput.split('@')[0] : `Học sinh ${rawInput}`;
@@ -174,9 +151,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
     }
 
     // Check stored custom credentials
-    let storedCreds: Record<string, string> = {
-      'tonga190984@gmail.com': '123456a@',
-    };
+    let storedCreds: Record<string, string> = {};
     try {
       const custom = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
       storedCreds = { ...storedCreds, ...custom };
@@ -189,32 +164,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
       storedCreds[normalizedInput] ||
       (phoneDigits ? storedCreds[phoneDigits] : undefined) ||
       (matchedStudent ? storedCreds[matchedStudent.id] || storedCreds[matchedStudent.schoolCode?.toLowerCase()] : undefined) ||
-      (matchedParent ? storedCreds[matchedParent.id] : undefined);
-
-    const KNOWN_SYSTEM_ACCOUNTS = [
-      'tuannmit09@gmail.com',
-      'tuannmit09@uranustech.vn',
-      'tonga190984@gmail.com',
-      'thaytuan.math@edututor.vn',
-      'teacher.an@edututor.vn',
-      'teacher.tuan@edututor.vn',
-      'parent.tuan@gmail.com',
-      'student.tuan@edututor.vn',
-      '0972334455',
-      '0972 334 455',
-      '0912345678',
-      '0912 345 678',
-    ];
+      (matchedParent ? storedCreds[matchedParent.id] : undefined) ||
+      (matchedTenant ? storedCreds[matchedTenant.id] || (matchedTenant.email ? storedCreds[matchedTenant.email.toLowerCase()] : undefined) : undefined);
 
     const isKnownSystemAccount =
-      KNOWN_SYSTEM_ACCOUNTS.includes(normalizedInput) ||
-      (phoneDigits && KNOWN_SYSTEM_ACCOUNTS.includes(phoneDigits)) ||
+      isAdminAccount ||
       !!matchedStudent ||
       !!matchedParent ||
       !!matchedTenant;
 
     if (hasCustomPassword || isKnownSystemAccount) {
-      const expectedPassword = hasCustomPassword || (normalizedInput === 'tonga190984@gmail.com' ? '123456a@' : '123456');
+      const expectedPassword = hasCustomPassword || '123456';
       const isPasswordCorrect =
         loginPassword === expectedPassword ||
         (!hasCustomPassword && (loginPassword === '123456' || (loginPassword.length >= 6 && isKnownSystemAccount)));

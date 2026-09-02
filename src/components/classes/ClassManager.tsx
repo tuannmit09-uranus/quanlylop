@@ -95,27 +95,56 @@ export const ClassManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Quản Lý Lớp Học Thêm</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Cấu hình đơn giá theo từng buổi học để tự động nhân số buổi tính học phí hàng tháng.
+          <div className="flex items-center space-x-2">
+            <h2 className="text-xl font-bold text-slate-900">Quản Lý Lớp Học Thêm</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100/80 text-blue-800">
+              {classes.length} lớp
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Thiết lập danh mục lớp học, phân công môn học, học phí từng buổi và xếp danh sách học sinh
           </p>
         </div>
+
         <button
           type="button"
           onClick={openCreateModal}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs"
+          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>Tạo lớp học mới</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {classes.map((cls) => {
-          const classStudents = students.filter((s) => cls.studentIds.includes(s.id));
-          return (
+      {/* Class list grid or Empty State */}
+      {classes.length === 0 ? (
+        <div className="bg-white rounded-3xl p-10 border border-slate-200 text-center space-y-4 shadow-2xs">
+          <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto">
+            <Layers className="w-7 h-7" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1">
+            <h3 className="text-base font-bold text-slate-800">Chưa có lớp học nào</h3>
+            <p className="text-xs text-slate-500">
+              Bắt đầu tạo lớp học đầu tiên để quản lý học sinh, buổi học và thu học phí.
+            </p>
+          </div>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors shadow-xs inline-flex items-center space-x-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tạo lớp học đầu tiên</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {classes.map((cls) => (
             <div
               key={cls.id}
               className="bg-white rounded-3xl p-5 border border-slate-200 shadow-2xs hover:border-blue-300 transition-all flex flex-col justify-between"
@@ -137,7 +166,7 @@ export const ClassManager: React.FC = () => {
                       {cls.name}
                     </h3>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-200">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-200 shrink-0">
                     {formatVND(cls.feePerSession)} / buổi
                   </span>
                 </div>
@@ -167,6 +196,7 @@ export const ClassManager: React.FC = () => {
                     type="button"
                     onClick={() => openEditModal(cls)}
                     className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100"
+                    title="Chỉnh sửa lớp học"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
@@ -178,15 +208,16 @@ export const ClassManager: React.FC = () => {
                       }
                     }}
                     className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                    title="Xóa lớp học"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Class Modal */}
       {showModal && (
@@ -229,51 +260,62 @@ export const ClassManager: React.FC = () => {
                 <select
                   value={gradeLevel}
                   onChange={(e) => setGradeLevel(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden bg-white font-medium"
+                  className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden bg-white"
                 >
+                  <option value="Khối lớp 1">Khối lớp 1</option>
+                  <option value="Khối lớp 2">Khối lớp 2</option>
+                  <option value="Khối lớp 3">Khối lớp 3</option>
+                  <option value="Khối lớp 4">Khối lớp 4</option>
+                  <option value="Khối lớp 5">Khối lớp 5</option>
+                  <option value="Khối lớp 6">Khối lớp 6</option>
+                  <option value="Khối lớp 7">Khối lớp 7</option>
+                  <option value="Khối lớp 8">Khối lớp 8</option>
+                  <option value="Khối lớp 9">Khối lớp 9</option>
                   <option value="Khối lớp 10">Khối lớp 10</option>
                   <option value="Khối lớp 11">Khối lớp 11</option>
                   <option value="Khối lớp 12">Khối lớp 12</option>
+                  <option value="Luyện thi Đại Học">Luyện thi Đại Học</option>
+                  <option value="Luyện thi Chuyên">Luyện thi Chuyên</option>
+                  <option value="Luyện thi IELTS / Ngoại Ngữ">Luyện thi IELTS / Ngoại Ngữ</option>
                 </select>
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Đơn giá học phí một buổi (VNĐ):
-                </label>
+                <label className="font-bold text-slate-700 block mb-1">Học phí một buổi (VNĐ):</label>
                 <input
                   type="number"
-                  step={10000}
                   value={feePerSession}
                   onChange={(e) => setFeePerSession(Number(e.target.value))}
-                  className="w-full border border-slate-300 rounded-xl p-2.5 font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  step="5000"
+                  min="0"
+                  className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden font-bold text-slate-900"
                   required
                 />
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Phòng học:</label>
+                <label className="font-bold text-slate-700 block mb-1">Phòng học (Địa điểm):</label>
                 <input
                   type="text"
                   value={room}
                   onChange={(e) => setRoom(e.target.value)}
-                  placeholder="Phòng 201 - Tầng 2"
+                  placeholder="Phòng 201 - Tầng 2 (hoặc Trực tuyến Zoom)"
                   className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden"
                 />
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Mô tả mục tiêu lớp:</label>
+                <label className="font-bold text-slate-700 block mb-1">Ghi chú / Mô tả lớp học:</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Bồi dưỡng học sinh giỏi tỉnh, chuyên đề giải tích..."
+                  rows={2}
+                  placeholder="Lớp ôn trọng tâm các dạng bài nâng cao, thi thử định kỳ hàng tháng..."
                   className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden"
-                  rows={3}
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}

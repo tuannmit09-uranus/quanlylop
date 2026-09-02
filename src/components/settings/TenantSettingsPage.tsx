@@ -59,6 +59,7 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
     updateTenant,
     addTenant,
     deleteTenant,
+    resetToDemoData,
     currentUser,
     setCurrentUser,
     currentRole,
@@ -96,6 +97,8 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
 
   // Modal / New Tenant State
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showWipeAllModal, setShowWipeAllModal] = useState(false);
+  const [isWiping, setIsWiping] = useState(false);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [deleteFeedback, setDeleteFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [newTenantData, setNewTenantData] = useState({
@@ -414,14 +417,6 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
       return;
     }
 
-    if (tenants.length <= 1) {
-      setDeleteFeedback({
-        type: 'error',
-        message: 'Hệ thống yêu cầu tối thiểu 1 không gian Tenant đang hoạt động. Không thể xóa!',
-      });
-      return;
-    }
-
     setTenantToDelete(tenant);
   };
 
@@ -438,6 +433,8 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
       const remaining = tenants.filter((t) => t.id !== targetId);
       if (remaining.length > 0) {
         setEditingTenantId(remaining[0].id);
+      } else {
+        setEditingTenantId('');
       }
     }
 
@@ -448,7 +445,20 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
     });
     setTimeout(() => {
       setDeleteFeedback(null);
-    }, 4500);
+    }, 4000);
+  };
+
+  const handleWipeAllTenants = async () => {
+    setIsWiping(true);
+    try {
+      await resetToDemoData();
+      setShowWipeAllModal(false);
+      setEditingTenantId('');
+    } catch (err: any) {
+      alert('Lỗi khi xóa dữ liệu hệ thống: ' + (err.message || err));
+    } finally {
+      setIsWiping(false);
+    }
   };
 
   const activeEditingTenant = tenants.find((t) => t.id === editingTenantId) || currentTenant;
@@ -1160,7 +1170,7 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
                               </button>
                             )}
 
-                            {tenants.length > 1 && (
+                            {isAdmin && (
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -1199,10 +1209,33 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
               Mỗi giáo viên (Tenant) sở hữu dữ liệu học sinh, điểm số, học phí và tài khoản VietQR hoàn toàn biệt lập, được gắn khóa định danh <code className="text-indigo-300 font-mono">tenant_id</code> an toàn tuyệt đối.
             </p>
             <div className="p-2.5 rounded-xl bg-white/10 text-white font-mono text-[10px] space-y-1">
-              <div>Tenant hiện hành: <strong className="text-emerald-400">{currentTenant.id}</strong></div>
-              <div>Giáo viên: <strong>{currentTenant.teacherName}</strong></div>
+              <div>Tenant hiện hành: <strong className="text-emerald-400">{currentTenant.id || '(Chưa có)'}</strong></div>
+              <div>Giáo viên: <strong>{currentTenant.teacherName || '(Chưa đăng ký)'}</strong></div>
             </div>
           </div>
+
+          {/* Danger Zone: System Wipe / Reset all Tenants */}
+          {isAdmin && (
+            <div className="bg-rose-50/70 border border-rose-200 rounded-3xl p-5 text-rose-900 shadow-sm space-y-3 text-xs">
+              <div className="flex items-center space-x-2 text-rose-700">
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                <span className="font-bold text-[11px] uppercase tracking-wider">
+                  Vùng Nguy Hiểm: Xóa Sạch Dữ Liệu & Tenant
+                </span>
+              </div>
+              <p className="text-rose-700 text-[11px] leading-relaxed">
+                Xóa toàn bộ các Tenant và mọi dữ liệu liên quan (lớp học, học sinh, điểm số, học phí) trên Cloud Firestore và bộ nhớ để bắt đầu đăng ký mới từ đầu.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowWipeAllModal(true)}
+                className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center space-x-2 shadow-xs cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Xóa Toàn Bộ Tenant & Reset Hệ Thống</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1387,6 +1420,76 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Xóa Vĩnh Viễn Tenant</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wipe All Tenants & System Data Confirmation Modal */}
+      {showWipeAllModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-rose-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-5 bg-gradient-to-r from-red-600 to-rose-700 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-bold">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">XÁC NHẬN XÓA TOÀN BỘ TENANT</h3>
+                  <p className="text-[11px] text-red-100">Làm sạch toàn bộ hệ thống để bắt đầu đăng ký mới</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isWiping}
+                onClick={() => setShowWipeAllModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-2">
+                <p className="font-bold text-rose-900 text-sm">
+                  Cảnh báo: Thao tác này sẽ xóa vĩnh viễn toàn bộ các Tenant!
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
+                  <li>Xóa tất cả <strong>{tenants.length}</strong> Tenant hiện có trong hệ thống.</li>
+                  <li>Xóa tất cả lớp học, học sinh, phụ huynh, bài tập, điểm danh và học phí.</li>
+                  <li>Xóa sạch tài liệu trên Firebase Cloud Firestore và LocalStorage.</li>
+                  <li>Hệ thống sẽ trở về trạng thái trống ban đầu để người dùng đăng ký mới hoàn toàn.</li>
+                </ul>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end space-x-3">
+                <button
+                  type="button"
+                  disabled={isWiping}
+                  onClick={() => setShowWipeAllModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="button"
+                  disabled={isWiping}
+                  onClick={handleWipeAllTenants}
+                  className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-colors shadow-md flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isWiping ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Đang xóa dữ liệu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Xác Nhận Xóa Sạch & Reset</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

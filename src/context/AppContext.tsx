@@ -61,6 +61,9 @@ import {
   seedCollectionIfEmpty,
   syncSaveToFirestore,
   syncDeleteFromFirestore,
+  subscribeToCollection,
+  fetchCollectionFromFirestore,
+  clearAllFirestoreCollections,
 } from '../lib/firestoreSync';
 import confetti from 'canvas-confetti';
 
@@ -91,6 +94,7 @@ interface AppContextType {
   deleteSubject: (id: string) => void;
 
   classes: ClassRoom[];
+  allClasses: ClassRoom[];
   addClass: (cls: Omit<ClassRoom, 'id' | 'tenant_id' | 'created_at'>) => void;
   updateClass: (id: string, cls: Partial<ClassRoom>) => void;
   deleteClass: (id: string) => void;
@@ -99,6 +103,7 @@ interface AppContextType {
 
   // Students
   students: Student[];
+  allStudents: Student[];
   addStudent: (student: Omit<Student, 'id' | 'tenant_id' | 'joinedDate'>) => void;
   updateStudent: (id: string, student: Partial<Student>) => void;
   deleteStudent: (id: string) => void;
@@ -207,6 +212,12 @@ interface AppContextType {
   auditLogs: AuditLog[];
   allAuditLogs?: AuditLog[];
 
+  // Cloud Sync & Data Management
+  refreshCloudData: () => Promise<void>;
+  importFullData: (jsonData: any) => Promise<{ success: boolean; message: string; count?: number }>;
+  isCloudSyncing: boolean;
+  lastCloudSyncTime: string;
+
   // Quick Reset
   resetToDemoData: () => void;
   resetData?: () => void;
@@ -215,24 +226,21 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Wipe legacy demo tenants once on version upgrade
+  const wipedKey = 'edututor_wiped_tenants_v4';
+  if (typeof window !== 'undefined' && !localStorage.getItem(wipedKey)) {
+    localStorage.clear();
+    localStorage.setItem(wipedKey, 'true');
+  }
+
   // Load from localStorage or Initial
   const [tenants, setTenants] = useState<Tenant[]>(() => {
     const saved = localStorage.getItem('edututor_tenants');
     if (saved) {
       try {
         const parsed: Tenant[] = JSON.parse(saved);
-        const cleaned = parsed.filter((t) => t.id !== 'tenant-mai');
-        if (cleaned.length > 0) {
-          const hasTuan = cleaned.some((t) => t.id === 'tenant-tuan');
-          const hasTonga = cleaned.some(
-            (t) => t.id === 'tenant-tonga' || (t.email && t.email.toLowerCase().trim() === 'tonga190984@gmail.com')
-          );
-          let res = hasTuan ? cleaned : [INITIAL_TENANTS[0], ...cleaned];
-          if (!hasTonga) {
-            res = [...res, INITIAL_TENANTS[1]];
-          }
-          return res;
-        }
+        const cleaned = parsed.filter((t) => t.id !== 'tenant-mai' && t.id !== 'tenant-tuan' && t.id !== 'tenant-tonga');
+        return cleaned;
       } catch {}
     }
     return INITIAL_TENANTS;
@@ -240,24 +248,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [currentTenantId, setCurrentTenantId] = useState<string>(() => {
     const saved = localStorage.getItem('edututor_current_tenant_id');
-    return (saved && saved !== 'tenant-mai') ? saved : 'tenant-tuan';
+    return (saved && saved !== 'tenant-mai' && saved !== 'tenant-tuan' && saved !== 'tenant-tonga') ? saved : '';
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>('teacher');
   const [activeStudentId, setActiveStudentId] = useState<string>(() => {
     const saved = localStorage.getItem('edututor_active_student_id');
-    return saved || 'stu-1';
+    return saved || '';
   });
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: UserRole; tenant_id: string; avatar?: string } | null>(() => {
     const saved = localStorage.getItem('edututor_current_user');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.name === 'Thầy Nguyễn Văn An' || parsed.email === 'teacher.an@edututor.vn') {
-          parsed.name = 'Thầy Nguyễn Văn Tuấn';
-          parsed.email = 'thaytuan.math@edututor.vn';
-          parsed.tenant_id = 'tenant-tuan';
-          localStorage.setItem('edututor_current_user', JSON.stringify(parsed));
+        if (parsed.tenant_id === 'tenant-tuan' || parsed.tenant_id === 'tenant-tonga' || parsed.tenant_id === 'tenant-mai') {
+          return null;
         }
         return parsed;
       } catch {
@@ -267,15 +272,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return null;
   });
 
-  const currentTenant = tenants.find((t) => t.id === currentTenantId) || tenants[0] || INITIAL_TENANTS[0];
+  const defaultEmptyTenant: Tenant = {
+    id: '',
+    name: 'Chưa có Không Gian / Trung Tâm',
+    teacherName: 'Chưa đăng ký',
+    phone: '',
+    email: '',
+    schoolSubject: '',
+    created_at: new Date().toISOString().split('T')[0],
+    paymentAccount: {
+      id: 'pay-default',
+      tenant_id: '',
+      bankName: 'Vietcombank',
+      bankCode: 'VCB',
+      accountNumber: '',
+      accountName: '',
+      isDefault: true,
+    },
+  };
+
+  const currentTenant = tenants.find((t) => t.id === currentTenantId) || tenants[0] || defaultEmptyTenant;
 
   const normalizeTenantList = <T extends { tenant_id?: string }>(items: T[]): T[] => {
-    return items.map((item) => {
-      if (!item.tenant_id) {
-        return { ...item, tenant_id: 'tenant-tuan' };
-      }
-      return item;
-    });
+    return items;
   };
 
   const [schools, setSchools] = useState<School[]>(() => {
@@ -293,32 +312,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [classes, setClasses] = useState<ClassRoom[]>(() => {
     const saved = localStorage.getItem('edututor_classes');
     const list: ClassRoom[] = saved ? JSON.parse(saved) : INITIAL_CLASSES;
-    const filtered = list.filter((c) => c.tenant_id !== 'tenant-tuan' && c.tenant_id !== 'tenant-tonga' && c.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
-  // Students list: ensure fresh clean list for teachers
+  // Students list
   const [students, setStudents] = useState<Student[]>(() => {
     const saved = localStorage.getItem('edututor_students');
     const list: Student[] = saved ? JSON.parse(saved) : INITIAL_STUDENTS;
-    const filtered = list.filter((s) => s.tenant_id !== 'tenant-tuan' && s.tenant_id !== 'tenant-tonga' && s.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
-  // Parents list: ensure fresh clean list for teachers
+  // Parents list
   const [parents, setParents] = useState<Parent[]>(() => {
     const saved = localStorage.getItem('edututor_parents');
     const list: Parent[] = saved ? JSON.parse(saved) : INITIAL_PARENTS;
-    const filtered = list.filter((p) => p.tenant_id !== 'tenant-tuan' && p.tenant_id !== 'tenant-tonga' && p.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
-  // ParentStudents link list: ensure fresh clean list for teachers
+  // ParentStudents link list
   const [parentStudents, setParentStudents] = useState<ParentStudent[]>(() => {
     const saved = localStorage.getItem('edututor_parent_students');
     const list: ParentStudent[] = saved ? JSON.parse(saved) : INITIAL_PARENT_STUDENTS;
-    const filtered = list.filter((ps) => ps.tenant_id !== 'tenant-tuan' && ps.tenant_id !== 'tenant-tonga' && ps.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   useEffect(() => {
@@ -374,92 +389,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [accountInvitations, setAccountInvitations] = useState<AccountInvitation[]>(() => {
     const saved = localStorage.getItem('edututor_account_invitations');
     const list: AccountInvitation[] = saved ? JSON.parse(saved) : INITIAL_ACCOUNT_INVITATIONS;
-    const filtered = list.filter((inv) => inv.tenant_id !== 'tenant-tuan' && inv.tenant_id !== 'tenant-tonga' && inv.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [recurringSchedules, setRecurringSchedules] = useState<RecurringSchedule[]>(() => {
     const saved = localStorage.getItem('edututor_schedules');
     const list: RecurringSchedule[] = saved ? JSON.parse(saved) : INITIAL_RECURRING_SCHEDULES;
-    const filtered = list.filter((rs) => rs.tenant_id !== 'tenant-tuan' && rs.tenant_id !== 'tenant-tonga' && rs.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [lessonSessions, setLessonSessions] = useState<LessonSession[]>(() => {
     const saved = localStorage.getItem('edututor_sessions');
     const list: LessonSession[] = saved ? JSON.parse(saved) : INITIAL_LESSON_SESSIONS;
-    const filtered = list.filter((ls) => ls.tenant_id !== 'tenant-tuan' && ls.tenant_id !== 'tenant-tonga' && ls.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [lessons, setLessons] = useState<Lesson[]>(() => {
     const saved = localStorage.getItem('edututor_lessons');
     const list: Lesson[] = saved ? JSON.parse(saved) : INITIAL_LESSONS;
-    const filtered = list.filter((l) => l.tenant_id !== 'tenant-tuan' && l.tenant_id !== 'tenant-tonga' && l.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
     const saved = localStorage.getItem('edututor_attendance');
     const list: AttendanceRecord[] = saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
-    const filtered = list.filter((a) => a.tenant_id !== 'tenant-tuan' && a.tenant_id !== 'tenant-tonga' && a.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [evaluations, setEvaluations] = useState<StudentEvaluation[]>(() => {
     const saved = localStorage.getItem('edututor_evaluations');
     const list: StudentEvaluation[] = saved ? JSON.parse(saved) : INITIAL_EVALUATIONS;
-    const filtered = list.filter((e) => e.tenant_id !== 'tenant-tuan' && e.tenant_id !== 'tenant-tonga' && e.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [homeworks, setHomeworks] = useState<Homework[]>(() => {
     const saved = localStorage.getItem('edututor_homeworks');
     const list: Homework[] = saved ? JSON.parse(saved) : INITIAL_HOMEWORK;
-    const filtered = list.filter((h) => h.tenant_id !== 'tenant-tuan' && h.tenant_id !== 'tenant-tonga' && h.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [submissions, setSubmissions] = useState<HomeworkSubmission[]>(() => {
     const saved = localStorage.getItem('edututor_submissions');
     const list: HomeworkSubmission[] = saved ? JSON.parse(saved) : INITIAL_SUBMISSIONS;
-    const filtered = list.filter((s) => s.tenant_id !== 'tenant-tuan' && s.tenant_id !== 'tenant-tonga' && s.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [comments, setComments] = useState<CommentItem[]>(() => {
     const saved = localStorage.getItem('edututor_comments');
     const list: CommentItem[] = saved ? JSON.parse(saved) : INITIAL_COMMENTS;
-    const filtered = list.filter((c) => c.tenant_id !== 'tenant-tuan' && c.tenant_id !== 'tenant-tonga' && c.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [tuitionItems, setTuitionItems] = useState<TuitionItem[]>(() => {
     const saved = localStorage.getItem('edututor_tuitions');
     const items: TuitionItem[] = saved ? JSON.parse(saved) : INITIAL_TUITION_ITEMS;
-    const filtered = items.filter((t) => t.tenant_id !== 'tenant-tuan' && t.tenant_id !== 'tenant-tonga' && t.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(items);
   });
 
   const [bankStatements, setBankStatements] = useState<BankStatement[]>(() => {
     const saved = localStorage.getItem('edututor_bank_statements');
     const list: BankStatement[] = saved ? JSON.parse(saved) : [];
-    const filtered = list.filter((bs) => bs.tenant_id !== 'tenant-tuan' && bs.tenant_id !== 'tenant-tonga' && bs.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>(() => {
     const saved = localStorage.getItem('edututor_bank_transactions');
     const list: BankTransaction[] = saved ? JSON.parse(saved) : INITIAL_BANK_TRANSACTIONS;
-    const filtered = list.filter((bt) => bt.tenant_id !== 'tenant-tuan' && bt.tenant_id !== 'tenant-tonga' && bt.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     const saved = localStorage.getItem('edututor_notifications');
     const list: NotificationItem[] = saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-    const filtered = list.filter((n) => n.tenant_id !== 'tenant-tuan' && n.tenant_id !== 'tenant-tonga' && n.tenant_id !== 'tenant-nga');
-    return normalizeTenantList(filtered);
+    return normalizeTenantList(list);
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
@@ -506,201 +508,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  // Initialize and Sync Firebase Cloud Firestore on mount
+  // Initialize and Sync Firebase Cloud Firestore on mount with real-time listeners
   useEffect(() => {
     testFirebaseConnection();
 
+    const unsubscribers: (() => void)[] = [];
+
     async function initFirestoreData() {
       try {
-        const [
-          fTenants,
-          fSchools,
-          fSubjects,
-          fClasses,
-          fStudents,
-          fParents,
-          fParentStudents,
-          fAccountInvitations,
-          fSchedules,
-          fSessions,
-          fLessons,
-          fAttendance,
-          fEvaluations,
-          fHomeworks,
-          fSubmissions,
-          fComments,
-          fTuitions,
-          fStatements,
-          fTransactions,
-          fNotifications,
-          fAuditLogs,
-        ] = await Promise.all([
-          seedCollectionIfEmpty('tenants', INITIAL_TENANTS),
-          seedCollectionIfEmpty('schools', INITIAL_SCHOOLS),
-          seedCollectionIfEmpty('subjects', INITIAL_SUBJECTS),
-          seedCollectionIfEmpty('classes', INITIAL_CLASSES),
-          seedCollectionIfEmpty('students', INITIAL_STUDENTS),
-          seedCollectionIfEmpty('parents', INITIAL_PARENTS),
-          seedCollectionIfEmpty('parent_students', INITIAL_PARENT_STUDENTS),
-          seedCollectionIfEmpty('account_invitations', INITIAL_ACCOUNT_INVITATIONS),
-          seedCollectionIfEmpty('schedules', INITIAL_RECURRING_SCHEDULES),
-          seedCollectionIfEmpty('sessions', INITIAL_LESSON_SESSIONS),
-          seedCollectionIfEmpty('lessons', INITIAL_LESSONS),
-          seedCollectionIfEmpty('attendance', INITIAL_ATTENDANCE),
-          seedCollectionIfEmpty('evaluations', INITIAL_EVALUATIONS),
-          seedCollectionIfEmpty('homeworks', INITIAL_HOMEWORK),
-          seedCollectionIfEmpty('submissions', INITIAL_SUBMISSIONS),
-          seedCollectionIfEmpty('comments', INITIAL_COMMENTS),
-          seedCollectionIfEmpty('tuitions', INITIAL_TUITION_ITEMS),
-          seedCollectionIfEmpty('bankStatements', [INITIAL_BANK_STATEMENT]),
-          seedCollectionIfEmpty('bankTransactions', INITIAL_BANK_TRANSACTIONS),
-          seedCollectionIfEmpty('notifications', INITIAL_NOTIFICATIONS),
-          seedCollectionIfEmpty('auditLogs', INITIAL_AUDIT_LOGS),
-        ]);
-
-        if (fTenants?.length) {
-          const cleanedTenants = fTenants.filter((t) => t.id !== 'tenant-mai');
-          const hasTonga = cleanedTenants.some(
-            (t) => t.id === 'tenant-tonga' || (t.email && t.email.toLowerCase().trim() === 'tonga190984@gmail.com')
-          );
-          const finalTenants = hasTonga ? cleanedTenants : [...cleanedTenants, INITIAL_TENANTS[1]];
-          setTenants(finalTenants);
+        const firestoreWipedKey = 'edututor_firestore_wiped_v4';
+        if (!localStorage.getItem(firestoreWipedKey)) {
+          await clearAllFirestoreCollections([
+            'tenants', 'schools', 'subjects', 'classes', 'students', 'parents', 'parent_students',
+            'account_invitations', 'schedules', 'sessions', 'lessons', 'attendance', 'evaluations',
+            'homeworks', 'submissions', 'comments', 'tuitions', 'bankStatements', 'bankTransactions',
+            'notifications', 'auditLogs',
+          ]);
+          localStorage.setItem(firestoreWipedKey, 'true');
         }
-        if (fSchools?.length) setSchools(normalizeTenantList(fSchools));
-        if (fSubjects?.length) setSubjects(normalizeTenantList(fSubjects));
 
-        // Purge legacy mock data for tenant-tuan and tenant-tonga across all operational tables
-        const purgeCollections = [
-          { name: 'classes', items: fClasses, setter: setClasses },
-          { name: 'students', items: fStudents, setter: setStudents },
-          { name: 'parents', items: fParents, setter: setParents },
-          { name: 'parent_students', items: fParentStudents, setter: setParentStudents },
-          { name: 'account_invitations', items: fAccountInvitations, setter: setAccountInvitations },
-          { name: 'schedules', items: fSchedules, setter: setRecurringSchedules },
-          { name: 'sessions', items: fSessions, setter: setLessonSessions },
-          { name: 'lessons', items: fLessons, setter: setLessons },
-          { name: 'attendance', items: fAttendance, setter: setAttendance },
-          { name: 'evaluations', items: fEvaluations, setter: setEvaluations },
-          { name: 'homeworks', items: fHomeworks, setter: setHomeworks },
-          { name: 'submissions', items: fSubmissions, setter: setSubmissions },
-          { name: 'comments', items: fComments, setter: setComments },
-          { name: 'tuitions', items: fTuitions, setter: setTuitionItems },
-          { name: 'bankStatements', items: fStatements, setter: setBankStatements },
-          { name: 'bankTransactions', items: fTransactions, setter: setBankTransactions },
-          { name: 'notifications', items: fNotifications, setter: setNotifications },
-        ];
-
-        purgeCollections.forEach(({ name, items, setter }) => {
-          if (items && items.length > 0) {
-            const obsoleteItems = items.filter(
-              (item: any) =>
-                item.tenant_id === 'tenant-tuan' ||
-                item.tenant_id === 'tenant-tonga' ||
-                item.tenant_id === 'tenant-nga' ||
-                !item.tenant_id
-            );
-            obsoleteItems.forEach((item: any) => syncDeleteFromFirestore(name, item.id));
-
-            const validItems = items.filter(
-              (item: any) =>
-                item.tenant_id &&
-                item.tenant_id !== 'tenant-tuan' &&
-                item.tenant_id !== 'tenant-tonga' &&
-                item.tenant_id !== 'tenant-nga'
-            );
-            setter(normalizeTenantList(validItems));
-          } else {
-            setter([]);
-          }
-        });
-
-        // Ensure all loaded tenants have a creation audit log
-        let mergedAuditLogs = fAuditLogs?.length ? normalizeTenantList(fAuditLogs) : INITIAL_AUDIT_LOGS;
-        const allLoadedTenants = (fTenants?.length ? fTenants : INITIAL_TENANTS).filter(
-          (t) => t.id !== 'tenant-mai'
+        // Real-time subscriptions for all operational collections
+        unsubscribers.push(
+          subscribeToCollection<Tenant>('tenants', (items) => {
+            const cleaned = (items || []).filter((t) => t.id !== 'tenant-mai' && t.id !== 'tenant-tuan' && t.id !== 'tenant-tonga');
+            setTenants(cleaned);
+          }),
+          subscribeToCollection<School>('schools', (items) => {
+            if (items) setSchools(items);
+          }),
+          subscribeToCollection<Subject>('subjects', (items) => {
+            if (items) setSubjects(items);
+          }),
+          subscribeToCollection<ClassRoom>('classes', (items) => setClasses(items || [])),
+          subscribeToCollection<Student>('students', (items) => setStudents(items || [])),
+          subscribeToCollection<Parent>('parents', (items) => setParents(items || [])),
+          subscribeToCollection<ParentStudent>('parent_students', (items) => setParentStudents(items || [])),
+          subscribeToCollection<AccountInvitation>('account_invitations', (items) => setAccountInvitations(items || [])),
+          subscribeToCollection<RecurringSchedule>('schedules', (items) => setRecurringSchedules(items || [])),
+          subscribeToCollection<LessonSession>('sessions', (items) => setLessonSessions(items || [])),
+          subscribeToCollection<Lesson>('lessons', (items) => setLessons(items || [])),
+          subscribeToCollection<AttendanceRecord>('attendance', (items) => setAttendance(items || [])),
+          subscribeToCollection<StudentEvaluation>('evaluations', (items) => setEvaluations(items || [])),
+          subscribeToCollection<Homework>('homeworks', (items) => setHomeworks(items || [])),
+          subscribeToCollection<HomeworkSubmission>('submissions', (items) => setSubmissions(items || [])),
+          subscribeToCollection<CommentItem>('comments', (items) => setComments(items || [])),
+          subscribeToCollection<TuitionItem>('tuitions', (items) => setTuitionItems(items || [])),
+          subscribeToCollection<BankStatement>('bankStatements', (items) => setBankStatements(items || [])),
+          subscribeToCollection<BankTransaction>('bankTransactions', (items) => setBankTransactions(items || [])),
+          subscribeToCollection<NotificationItem>('notifications', (items) => setNotifications(items || [])),
+          subscribeToCollection<AuditLog>('auditLogs', (items) => {
+            if (items) setAuditLogs(items);
+          })
         );
 
-        allLoadedTenants.forEach((t) => {
-          const hasCreationLog = mergedAuditLogs.some(
-            (l) => l.entityType === 'tenant' && l.entityId === t.id && l.action === 'create'
-          );
-          if (!hasCreationLog) {
-            const autoLog: AuditLog = {
-              id: `log-create-${t.id}`,
-              tenant_id: t.id,
-              actorId: t.id.startsWith('tenant-') ? `usr-${t.id}` : 'usr-teacher-1',
-              actorName: t.teacherName ? `Thầy/Cô ${t.teacherName}` : 'Người dùng / Giáo viên mới',
-              actorRole: 'teacher',
-              action: 'create',
-              entityType: 'tenant',
-              entityId: t.id,
-              description: `Đăng ký & Khởi tạo Không Gian Dạy Thêm (Tenant): "${t.name}" (Giáo viên: ${t.teacherName || 'Chưa đặt'}, Môn: ${t.schoolSubject || 'Chưa đặt'}, Email: ${t.email || 'N/A'}, SĐT: ${t.phone || 'N/A'})`,
-              newValue: JSON.stringify({
-                tenantId: t.id,
-                name: t.name,
-                teacherName: t.teacherName,
-                email: t.email,
-                phone: t.phone,
-                schoolSubject: t.schoolSubject,
-              }),
-              timestamp: t.created_at ? `${t.created_at} 08:30:00` : new Date().toLocaleString('vi-VN'),
-            };
-            mergedAuditLogs = [autoLog, ...mergedAuditLogs];
-            syncSaveToFirestore('auditLogs', autoLog.id, autoLog);
-          }
-        });
-
-        setAuditLogs(mergedAuditLogs);
-        console.log('Firebase Cloud Firestore synchronisation active and verified.');
+        console.log('Firebase Cloud Firestore real-time bidirectional synchronization established.');
       } catch (err) {
         console.warn('Firebase initial sync note:', err);
       }
-    }
-
-    // Clean any legacy/orphan student, class and operational records for tenant-tuan and tenant-tonga in localStorage
-    try {
-      const keysToClean = [
-        'edututor_classes',
-        'edututor_students',
-        'edututor_parents',
-        'edututor_parent_students',
-        'edututor_account_invitations',
-        'edututor_schedules',
-        'edututor_sessions',
-        'edututor_lessons',
-        'edututor_attendance',
-        'edututor_evaluations',
-        'edututor_homeworks',
-        'edututor_submissions',
-        'edututor_comments',
-        'edututor_tuitions',
-        'edututor_bank_statements',
-        'edututor_bank_transactions',
-        'edututor_notifications',
-      ];
-      keysToClean.forEach((key) => {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-          const parsed: any[] = JSON.parse(stored);
-          const filtered = parsed.filter(
-            (item) =>
-              item.tenant_id &&
-              item.tenant_id !== 'tenant-tuan' &&
-              item.tenant_id !== 'tenant-tonga' &&
-              item.tenant_id !== 'tenant-nga'
-          );
-          localStorage.setItem(key, JSON.stringify(filtered));
-        }
-      });
-    } catch {
-      //
     }
 
     // Initialize and merge default custom credentials
     try {
       const existing = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
       const merged = { ...DEFAULT_CUSTOM_CREDENTIALS, ...existing };
-      // Ensure tonga190984@gmail.com has 123456a@ if not explicitly overridden
       if (!existing['tonga190984@gmail.com']) {
         merged['tonga190984@gmail.com'] = '123456a@';
       }
@@ -710,6 +580,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     initFirestoreData();
+
+    return () => {
+      unsubscribers.forEach((unsub) => {
+        try {
+          unsub();
+        } catch {}
+      });
+    };
   }, []);
 
   // Save to localStorage
@@ -988,18 +866,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTenant = (tenantId: string): boolean => {
-    if (tenants.length <= 1) {
-      console.warn('Không thể xóa Tenant duy nhất trong hệ thống!');
-      return false;
-    }
-
     const remaining = tenants.filter((t) => t.id !== tenantId);
     setTenants(remaining);
     syncDeleteFromFirestore('tenants', tenantId);
 
-    if (currentTenantId === tenantId && remaining.length > 0) {
-      setCurrentTenantId(remaining[0].id);
-      localStorage.setItem('edututor_current_tenant_id', remaining[0].id);
+    if (currentTenantId === tenantId) {
+      const nextId = remaining.length > 0 ? remaining[0].id : '';
+      setCurrentTenantId(nextId);
+      localStorage.setItem('edututor_current_tenant_id', nextId);
     }
 
     // Clean up dependent collections in state & firestore for this tenant
@@ -1187,14 +1061,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setRecurringSchedules((prev) => {
         const updated = prev.map((s) => (s.classId === id ? { ...s, className: data.name! } : s));
         updated.forEach((s) => {
-          if (s.classId === id) syncSaveToFirestore('recurringSchedules', s.id, s);
+          if (s.classId === id) syncSaveToFirestore('schedules', s.id, s);
         });
         return updated;
       });
       setLessonSessions((prev) => {
         const updated = prev.map((s) => (s.classId === id ? { ...s, className: data.name! } : s));
         updated.forEach((s) => {
-          if (s.classId === id) syncSaveToFirestore('lessonSessions', s.id, s);
+          if (s.classId === id) syncSaveToFirestore('sessions', s.id, s);
         });
         return updated;
       });
@@ -3271,32 +3145,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Reset to Demo Data
-  const resetToDemoData = () => {
+  // Reset and wipe all system tenants & data
+  const resetToDemoData = async () => {
     localStorage.clear();
-    setTenants(INITIAL_TENANTS);
-    setCurrentTenantId('tenant-tuan');
-    setSchools(INITIAL_SCHOOLS);
-    setSubjects(INITIAL_SUBJECTS);
-    setClasses(INITIAL_CLASSES);
-    setStudents(INITIAL_STUDENTS);
-    setParents(INITIAL_PARENTS);
-    setParentStudents(INITIAL_PARENT_STUDENTS);
-    setAccountInvitations(INITIAL_ACCOUNT_INVITATIONS);
-    setRecurringSchedules(INITIAL_RECURRING_SCHEDULES);
-    setLessonSessions(INITIAL_LESSON_SESSIONS);
-    setLessons(INITIAL_LESSONS);
-    setAttendance(INITIAL_ATTENDANCE);
-    setEvaluations(INITIAL_EVALUATIONS);
-    setHomeworks(INITIAL_HOMEWORK);
-    setSubmissions(INITIAL_SUBMISSIONS);
-    setComments(INITIAL_COMMENTS);
-    setTuitionItems(INITIAL_TUITION_ITEMS);
-    setBankStatements([INITIAL_BANK_STATEMENT]);
-    setBankTransactions(INITIAL_BANK_TRANSACTIONS);
-    setNotifications(INITIAL_NOTIFICATIONS);
-    setAuditLogs(INITIAL_AUDIT_LOGS);
-    alert('Đã đặt lại toàn bộ dữ liệu mẫu ban đầu thành công!');
+    localStorage.setItem('edututor_wiped_tenants_v4', 'true');
+    localStorage.setItem('edututor_firestore_wiped_v4', 'true');
+    setTenants([]);
+    setCurrentTenantId('');
+    setSchools([]);
+    setSubjects([]);
+    setClasses([]);
+    setStudents([]);
+    setParents([]);
+    setParentStudents([]);
+    setAccountInvitations([]);
+    setRecurringSchedules([]);
+    setLessonSessions([]);
+    setLessons([]);
+    setAttendance([]);
+    setEvaluations([]);
+    setHomeworks([]);
+    setSubmissions([]);
+    setComments([]);
+    setTuitionItems([]);
+    setBankStatements([]);
+    setBankTransactions([]);
+    setNotifications([]);
+    setAuditLogs([]);
+    setCurrentUser(null);
+    try {
+      await clearAllFirestoreCollections([
+        'tenants', 'schools', 'subjects', 'classes', 'students', 'parents', 'parent_students',
+        'account_invitations', 'schedules', 'sessions', 'lessons', 'attendance', 'evaluations',
+        'homeworks', 'submissions', 'comments', 'tuitions', 'bankStatements', 'bankTransactions',
+        'notifications', 'auditLogs',
+      ]);
+    } catch (e) {
+      console.warn('Wipe firestore collections note:', e);
+    }
+    alert('Đã xóa toàn bộ dữ liệu & Tenant trong hệ thống. Bạn có thể bắt đầu đăng ký mới!');
   };
 
   const addBankTransaction = (txn: Partial<BankTransaction> & { amount: number; description: string }) => {
@@ -3317,6 +3204,191 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBankTransactions((prev) => [newTxn, ...prev]);
     syncSaveToFirestore('bankTransactions', newTxn.id, newTxn);
     addAuditLog('create', 'bank_transaction', newTxn.id, `Giao dịch chuyển khoản mới: +${newTxn.amount.toLocaleString('vi-VN')}đ (${newTxn.description})`);
+  };
+
+  // Cloud sync status and manual refresh
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string>(() => new Date().toLocaleTimeString('vi-VN'));
+
+  const refreshCloudData = async () => {
+    setIsCloudSyncing(true);
+    try {
+      const [
+        fTenants,
+        fSchools,
+        fSubjects,
+        fClasses,
+        fStudents,
+        fParents,
+        fParentStudents,
+        fAccountInvitations,
+        fSchedules,
+        fSessions,
+        fLessons,
+        fAttendance,
+        fEvaluations,
+        fHomeworks,
+        fSubmissions,
+        fComments,
+        fTuitions,
+        fStatements,
+        fTransactions,
+        fNotifications,
+        fAuditLogs,
+      ] = await Promise.all([
+        fetchCollectionFromFirestore<Tenant>('tenants'),
+        fetchCollectionFromFirestore<School>('schools'),
+        fetchCollectionFromFirestore<Subject>('subjects'),
+        fetchCollectionFromFirestore<ClassRoom>('classes'),
+        fetchCollectionFromFirestore<Student>('students'),
+        fetchCollectionFromFirestore<Parent>('parents'),
+        fetchCollectionFromFirestore<ParentStudent>('parent_students'),
+        fetchCollectionFromFirestore<AccountInvitation>('account_invitations'),
+        fetchCollectionFromFirestore<RecurringSchedule>('schedules'),
+        fetchCollectionFromFirestore<LessonSession>('sessions'),
+        fetchCollectionFromFirestore<Lesson>('lessons'),
+        fetchCollectionFromFirestore<AttendanceRecord>('attendance'),
+        fetchCollectionFromFirestore<StudentEvaluation>('evaluations'),
+        fetchCollectionFromFirestore<Homework>('homeworks'),
+        fetchCollectionFromFirestore<HomeworkSubmission>('submissions'),
+        fetchCollectionFromFirestore<CommentItem>('comments'),
+        fetchCollectionFromFirestore<TuitionItem>('tuitions'),
+        fetchCollectionFromFirestore<BankStatement>('bankStatements'),
+        fetchCollectionFromFirestore<BankTransaction>('bankTransactions'),
+        fetchCollectionFromFirestore<NotificationItem>('notifications'),
+        fetchCollectionFromFirestore<AuditLog>('auditLogs'),
+      ]);
+
+      if (fTenants && fTenants.length > 0) setTenants(fTenants);
+      if (fSchools && fSchools.length > 0) setSchools(normalizeTenantList(fSchools));
+      if (fSubjects && fSubjects.length > 0) setSubjects(normalizeTenantList(fSubjects));
+      if (fClasses && fClasses.length > 0) setClasses(normalizeTenantList(fClasses));
+      if (fStudents && fStudents.length > 0) setStudents(normalizeTenantList(fStudents));
+      if (fParents && fParents.length > 0) setParents(normalizeTenantList(fParents));
+      if (fParentStudents && fParentStudents.length > 0) setParentStudents(normalizeTenantList(fParentStudents));
+      if (fAccountInvitations && fAccountInvitations.length > 0) setAccountInvitations(normalizeTenantList(fAccountInvitations));
+      if (fSchedules && fSchedules.length > 0) setRecurringSchedules(normalizeTenantList(fSchedules));
+      if (fSessions && fSessions.length > 0) setLessonSessions(normalizeTenantList(fSessions));
+      if (fLessons && fLessons.length > 0) setLessons(normalizeTenantList(fLessons));
+      if (fAttendance && fAttendance.length > 0) setAttendance(normalizeTenantList(fAttendance));
+      if (fEvaluations && fEvaluations.length > 0) setEvaluations(normalizeTenantList(fEvaluations));
+      if (fHomeworks && fHomeworks.length > 0) setHomeworks(normalizeTenantList(fHomeworks));
+      if (fSubmissions && fSubmissions.length > 0) setSubmissions(normalizeTenantList(fSubmissions));
+      if (fComments && fComments.length > 0) setComments(normalizeTenantList(fComments));
+      if (fTuitions && fTuitions.length > 0) setTuitionItems(normalizeTenantList(fTuitions));
+      if (fStatements && fStatements.length > 0) setBankStatements(normalizeTenantList(fStatements));
+      if (fTransactions && fTransactions.length > 0) setBankTransactions(normalizeTenantList(fTransactions));
+      if (fNotifications && fNotifications.length > 0) setNotifications(normalizeTenantList(fNotifications));
+      if (fAuditLogs && fAuditLogs.length > 0) setAuditLogs(normalizeTenantList(fAuditLogs));
+
+      setLastCloudSyncTime(new Date().toLocaleTimeString('vi-VN'));
+    } catch (err) {
+      console.warn('Manual refresh from Firestore error:', err);
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
+
+  const importFullData = async (jsonData: any): Promise<{ success: boolean; message: string; count?: number }> => {
+    try {
+      let importedClasses = 0;
+      let importedStudents = 0;
+
+      if (Array.isArray(jsonData)) {
+        const validClasses: ClassRoom[] = jsonData.map((c: any, i: number) => ({
+          id: c.id || `cls-${Date.now()}-${i}`,
+          tenant_id: c.tenant_id || currentTenant.id,
+          name: c.name || `Lớp ${i + 1}`,
+          subjectId: c.subjectId || subjects[0]?.id || 'sub-1',
+          subjectName: c.subjectName || subjects[0]?.name || 'Toán Học',
+          gradeLevel: c.gradeLevel || 'Khối lớp 10',
+          feePerSession: Number(c.feePerSession) || 100000,
+          description: c.description || '',
+          room: c.room || '',
+          studentIds: Array.isArray(c.studentIds) ? c.studentIds : [],
+          status: c.status || 'active',
+          created_at: c.created_at || new Date().toISOString().split('T')[0],
+        }));
+
+        setClasses((prev) => {
+          const merged = [...prev];
+          validClasses.forEach((vc) => {
+            const idx = merged.findIndex((m) => m.id === vc.id);
+            if (idx >= 0) merged[idx] = vc;
+            else merged.push(vc);
+            syncSaveToFirestore('classes', vc.id, vc);
+          });
+          return merged;
+        });
+        importedClasses = validClasses.length;
+      } else if (typeof jsonData === 'object' && jsonData !== null) {
+        if (Array.isArray(jsonData.classes)) {
+          const validClasses: ClassRoom[] = jsonData.classes.map((c: any, i: number) => ({
+            id: c.id || `cls-${Date.now()}-${i}`,
+            tenant_id: c.tenant_id || currentTenant.id,
+            name: c.name || `Lớp ${i + 1}`,
+            subjectId: c.subjectId || subjects[0]?.id || 'sub-1',
+            subjectName: c.subjectName || subjects[0]?.name || 'Toán Học',
+            gradeLevel: c.gradeLevel || 'Khối lớp 10',
+            feePerSession: Number(c.feePerSession) || 100000,
+            description: c.description || '',
+            room: c.room || '',
+            studentIds: Array.isArray(c.studentIds) ? c.studentIds : [],
+            status: c.status || 'active',
+            created_at: c.created_at || new Date().toISOString().split('T')[0],
+          }));
+
+          setClasses((prev) => {
+            const merged = [...prev];
+            validClasses.forEach((vc) => {
+              const idx = merged.findIndex((m) => m.id === vc.id);
+              if (idx >= 0) merged[idx] = vc;
+              else merged.push(vc);
+              syncSaveToFirestore('classes', vc.id, vc);
+            });
+            return merged;
+          });
+          importedClasses = validClasses.length;
+        }
+
+        if (Array.isArray(jsonData.students)) {
+          const validStudents: Student[] = jsonData.students.map((s: any, i: number) => ({
+            id: s.id || `stu-${Date.now()}-${i}`,
+            tenant_id: s.tenant_id || currentTenant.id,
+            fullName: s.fullName || `Học sinh ${i + 1}`,
+            schoolCode: s.schoolCode || `HS${100 + i}`,
+            birthYear: s.birthYear || 2008,
+            phone: s.phone || '',
+            email: s.email || '',
+            parentName: s.parentName || '',
+            parentPhone: s.parentPhone || '',
+            enrolledClassIds: Array.isArray(s.enrolledClassIds) ? s.enrolledClassIds : [],
+            joinedDate: s.joinedDate || new Date().toISOString().split('T')[0],
+            status: s.status || 'active',
+          }));
+
+          setStudents((prev) => {
+            const merged = [...prev];
+            validStudents.forEach((vs) => {
+              const idx = merged.findIndex((m) => m.id === vs.id);
+              if (idx >= 0) merged[idx] = vs;
+              else merged.push(vs);
+              syncSaveToFirestore('students', vs.id, vs);
+            });
+            return merged;
+          });
+          importedStudents = validStudents.length;
+        }
+      }
+
+      return {
+        success: true,
+        message: `Đã nhập thành công ${importedClasses} lớp học và ${importedStudents} học sinh, đồng bộ lên Cloud Firestore.`,
+        count: importedClasses,
+      };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Lỗi khi xử lý dữ liệu' };
+    }
   };
 
   // Filtered collections for current tenant workspace
@@ -3367,12 +3439,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSubject,
         deleteSubject,
         classes: tenantClasses,
+        allClasses: classes,
         addClass,
         updateClass,
         deleteClass,
         assignStudentToClass,
         removeStudentFromClass,
         students: tenantStudents,
+        allStudents: students,
         addStudent,
         updateStudent,
         deleteStudent,
@@ -3455,6 +3529,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markAllNotificationsRead,
         auditLogs: effectiveAuditLogs,
         allAuditLogs: auditLogs,
+        refreshCloudData,
+        importFullData,
+        isCloudSyncing,
+        lastCloudSyncTime,
         resetToDemoData,
         resetData: resetToDemoData,
       }}
