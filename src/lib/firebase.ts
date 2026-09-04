@@ -74,13 +74,43 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   return errInfo;
 }
 
+/**
+ * Remove undefined values and deeply sanitize data for Firestore
+ */
+export function cleanDataForFirestore<T>(data: T): T {
+  if (data === undefined || data === null) {
+    return null as unknown as T;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => cleanDataForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        result[key] = cleanDataForFirestore(value);
+      }
+    }
+    return result as T;
+  }
+  return data;
+}
+
 // Connection test helper
-export async function testFirebaseConnection() {
+export async function testFirebaseConnection(): Promise<boolean> {
   try {
-    await getDoc(doc(db, 'test', 'connection'));
-    console.log('Firebase connection initialized');
+    const testDocRef = doc(db, 'test', 'connection');
+    await setDoc(testDocRef, {
+      status: 'online',
+      projectId: firebaseConfig.projectId,
+      firestoreDatabaseId: firebaseConfig.firestoreDatabaseId,
+      lastPing: new Date().toISOString(),
+    }, { merge: true });
+    console.log('Firebase Cloud Firestore connection active & verified.');
+    return true;
   } catch (error) {
-    console.info('Firebase connection note: offline persistence ready.', error);
+    console.warn('Firebase Cloud Firestore connection note:', error);
+    return false;
   }
 }
 
@@ -146,7 +176,8 @@ export async function uploadBase64ToFirebaseStorage(
 export async function saveDocumentToFirestore(collectionName: string, docId: string, data: any) {
   try {
     const docRef = doc(db, collectionName, docId);
-    await setDoc(docRef, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
+    const sanitized = cleanDataForFirestore(data);
+    await setDoc(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${collectionName}/${docId}`);
   }

@@ -64,6 +64,9 @@ import {
   subscribeToCollection,
   fetchCollectionFromFirestore,
   clearAllFirestoreCollections,
+  pushAllDataToFirestore,
+  checkFirestoreHasData,
+  fetchCollectionCounts,
 } from '../lib/firestoreSync';
 import confetti from 'canvas-confetti';
 
@@ -105,6 +108,7 @@ interface AppContextType {
   students: Student[];
   allStudents: Student[];
   addStudent: (student: Omit<Student, 'id' | 'tenant_id' | 'joinedDate'>) => void;
+  addBatchStudents: (studentsList: Array<Omit<Student, 'id' | 'tenant_id' | 'joinedDate'>>) => Promise<Student[]>;
   updateStudent: (id: string, student: Partial<Student>) => void;
   deleteStudent: (id: string) => void;
 
@@ -214,6 +218,9 @@ interface AppContextType {
 
   // Cloud Sync & Data Management
   refreshCloudData: () => Promise<void>;
+  pushAllLocalDataToFirestore: () => Promise<{ success: boolean; totalWritten: number; message: string }>;
+  firestoreStats: Record<string, number>;
+  refreshFirestoreStats: () => Promise<Record<string, number>>;
   importFullData: (jsonData: any) => Promise<{ success: boolean; message: string; count?: number }>;
   isCloudSyncing: boolean;
   lastCloudSyncTime: string;
@@ -226,13 +233,6 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Wipe legacy demo tenants once on version upgrade
-  const wipedKey = 'edututor_wiped_tenants_v4';
-  if (typeof window !== 'undefined' && !localStorage.getItem(wipedKey)) {
-    localStorage.clear();
-    localStorage.setItem(wipedKey, 'true');
-  }
-
   // Load from localStorage or Initial
   const [tenants, setTenants] = useState<Tenant[]>(() => {
     const saved = localStorage.getItem('edututor_tenants');
@@ -240,7 +240,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed: Tenant[] = JSON.parse(saved);
         const cleaned = parsed.filter((t) => t.id !== 'tenant-mai' && t.id !== 'tenant-tuan' && t.id !== 'tenant-tonga');
-        return cleaned;
+        if (!cleaned.some((t) => t.id === 'tenant-1788330721941')) {
+          cleaned.push(INITIAL_TENANTS[0]);
+        }
+        return cleaned.length > 0 ? cleaned : INITIAL_TENANTS;
       } catch {}
     }
     return INITIAL_TENANTS;
@@ -248,7 +251,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [currentTenantId, setCurrentTenantId] = useState<string>(() => {
     const saved = localStorage.getItem('edututor_current_tenant_id');
-    return (saved && saved !== 'tenant-mai' && saved !== 'tenant-tuan' && saved !== 'tenant-tonga') ? saved : '';
+    if (saved && saved !== 'tenant-mai' && saved !== 'tenant-tuan' && saved !== 'tenant-tonga') {
+      return saved;
+    }
+    return 'tenant-1788330721941';
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>('teacher');
@@ -299,26 +305,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [schools, setSchools] = useState<School[]>(() => {
     const saved = localStorage.getItem('edututor_schools');
-    const list = saved ? JSON.parse(saved) : INITIAL_SCHOOLS;
+    let list: School[] = INITIAL_SCHOOLS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+      } catch {}
+    }
+    INITIAL_SCHOOLS.forEach((s) => {
+      if (!list.some((item) => item.id === s.id)) list.push(s);
+    });
     return normalizeTenantList(list);
   });
 
   const [subjects, setSubjects] = useState<Subject[]>(() => {
     const saved = localStorage.getItem('edututor_subjects');
-    const list = saved ? JSON.parse(saved) : INITIAL_SUBJECTS;
+    let list: Subject[] = INITIAL_SUBJECTS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+      } catch {}
+    }
+    INITIAL_SUBJECTS.forEach((s) => {
+      if (!list.some((item) => item.id === s.id)) list.push(s);
+    });
     return normalizeTenantList(list);
   });
 
   const [classes, setClasses] = useState<ClassRoom[]>(() => {
     const saved = localStorage.getItem('edututor_classes');
-    const list: ClassRoom[] = saved ? JSON.parse(saved) : INITIAL_CLASSES;
+    let list: ClassRoom[] = INITIAL_CLASSES;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+      } catch {}
+    }
+    INITIAL_CLASSES.forEach((c) => {
+      if (!list.some((item) => item.id === c.id)) list.push(c);
+    });
     return normalizeTenantList(list);
   });
 
   // Students list
   const [students, setStudents] = useState<Student[]>(() => {
     const saved = localStorage.getItem('edututor_students');
-    const list: Student[] = saved ? JSON.parse(saved) : INITIAL_STUDENTS;
+    let list: Student[] = INITIAL_STUDENTS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+      } catch {}
+    }
+    INITIAL_STUDENTS.forEach((st) => {
+      if (!list.some((item) => item.id === st.id)) list.push(st);
+    });
     return normalizeTenantList(list);
   });
 
@@ -516,52 +558,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     async function initFirestoreData() {
       try {
-        const firestoreWipedKey = 'edututor_firestore_wiped_v4';
-        if (!localStorage.getItem(firestoreWipedKey)) {
-          await clearAllFirestoreCollections([
-            'tenants', 'schools', 'subjects', 'classes', 'students', 'parents', 'parent_students',
-            'account_invitations', 'schedules', 'sessions', 'lessons', 'attendance', 'evaluations',
-            'homeworks', 'submissions', 'comments', 'tuitions', 'bankStatements', 'bankTransactions',
-            'notifications', 'auditLogs',
-          ]);
-          localStorage.setItem(firestoreWipedKey, 'true');
+        // Check if Cloud Firestore currently has documents
+        const hasData = await checkFirestoreHasData();
+        if (!hasData) {
+          console.log('Cloud Firestore is empty. Auto-seeding initial data...');
+          await pushAllDataToFirestore({
+            tenants: INITIAL_TENANTS,
+            schools: INITIAL_SCHOOLS,
+            subjects: INITIAL_SUBJECTS,
+            classes: INITIAL_CLASSES,
+            students: INITIAL_STUDENTS,
+            parents: INITIAL_PARENTS,
+            parent_students: INITIAL_PARENT_STUDENTS,
+            account_invitations: INITIAL_ACCOUNT_INVITATIONS,
+            schedules: INITIAL_RECURRING_SCHEDULES,
+            sessions: INITIAL_LESSON_SESSIONS,
+            lessons: INITIAL_LESSONS,
+            attendance: INITIAL_ATTENDANCE,
+            evaluations: INITIAL_EVALUATIONS,
+            homeworks: INITIAL_HOMEWORK,
+            submissions: INITIAL_SUBMISSIONS,
+            comments: INITIAL_COMMENTS,
+            tuitions: INITIAL_TUITION_ITEMS,
+            bankStatements: [INITIAL_BANK_STATEMENT],
+            bankTransactions: INITIAL_BANK_TRANSACTIONS,
+            notifications: INITIAL_NOTIFICATIONS,
+            auditLogs: INITIAL_AUDIT_LOGS,
+          });
+          console.log('Cloud Firestore auto-seed completed.');
         }
 
         // Real-time subscriptions for all operational collections
         unsubscribers.push(
           subscribeToCollection<Tenant>('tenants', (items) => {
-            const cleaned = (items || []).filter((t) => t.id !== 'tenant-mai' && t.id !== 'tenant-tuan' && t.id !== 'tenant-tonga');
-            setTenants(cleaned);
+            if (items && items.length > 0) {
+              const cleaned = items.filter((t) => t.id !== 'tenant-mai' && t.id !== 'tenant-tuan' && t.id !== 'tenant-tonga');
+              if (cleaned.length > 0) setTenants(cleaned);
+            }
           }),
           subscribeToCollection<School>('schools', (items) => {
-            if (items) setSchools(items);
+            if (items && items.length > 0) setSchools(items);
           }),
           subscribeToCollection<Subject>('subjects', (items) => {
-            if (items) setSubjects(items);
+            if (items && items.length > 0) setSubjects(items);
           }),
-          subscribeToCollection<ClassRoom>('classes', (items) => setClasses(items || [])),
-          subscribeToCollection<Student>('students', (items) => setStudents(items || [])),
-          subscribeToCollection<Parent>('parents', (items) => setParents(items || [])),
-          subscribeToCollection<ParentStudent>('parent_students', (items) => setParentStudents(items || [])),
-          subscribeToCollection<AccountInvitation>('account_invitations', (items) => setAccountInvitations(items || [])),
-          subscribeToCollection<RecurringSchedule>('schedules', (items) => setRecurringSchedules(items || [])),
-          subscribeToCollection<LessonSession>('sessions', (items) => setLessonSessions(items || [])),
-          subscribeToCollection<Lesson>('lessons', (items) => setLessons(items || [])),
-          subscribeToCollection<AttendanceRecord>('attendance', (items) => setAttendance(items || [])),
-          subscribeToCollection<StudentEvaluation>('evaluations', (items) => setEvaluations(items || [])),
-          subscribeToCollection<Homework>('homeworks', (items) => setHomeworks(items || [])),
-          subscribeToCollection<HomeworkSubmission>('submissions', (items) => setSubmissions(items || [])),
-          subscribeToCollection<CommentItem>('comments', (items) => setComments(items || [])),
-          subscribeToCollection<TuitionItem>('tuitions', (items) => setTuitionItems(items || [])),
-          subscribeToCollection<BankStatement>('bankStatements', (items) => setBankStatements(items || [])),
-          subscribeToCollection<BankTransaction>('bankTransactions', (items) => setBankTransactions(items || [])),
-          subscribeToCollection<NotificationItem>('notifications', (items) => setNotifications(items || [])),
+          subscribeToCollection<ClassRoom>('classes', (items) => {
+            if (items && items.length > 0) setClasses(items);
+          }),
+          subscribeToCollection<Student>('students', (items) => {
+            if (items && items.length > 0) setStudents(items);
+          }),
+          subscribeToCollection<Parent>('parents', (items) => {
+            if (items && items.length > 0) setParents(items);
+          }),
+          subscribeToCollection<ParentStudent>('parent_students', (items) => {
+            if (items && items.length > 0) setParentStudents(items);
+          }),
+          subscribeToCollection<AccountInvitation>('account_invitations', (items) => {
+            if (items && items.length > 0) setAccountInvitations(items);
+          }),
+          subscribeToCollection<RecurringSchedule>('schedules', (items) => {
+            if (items && items.length > 0) setRecurringSchedules(items);
+          }),
+          subscribeToCollection<LessonSession>('sessions', (items) => {
+            if (items && items.length > 0) setLessonSessions(items);
+          }),
+          subscribeToCollection<Lesson>('lessons', (items) => {
+            if (items && items.length > 0) setLessons(items);
+          }),
+          subscribeToCollection<AttendanceRecord>('attendance', (items) => {
+            if (items && items.length > 0) setAttendance(items);
+          }),
+          subscribeToCollection<StudentEvaluation>('evaluations', (items) => {
+            if (items && items.length > 0) setEvaluations(items);
+          }),
+          subscribeToCollection<Homework>('homeworks', (items) => {
+            if (items && items.length > 0) setHomeworks(items);
+          }),
+          subscribeToCollection<HomeworkSubmission>('submissions', (items) => {
+            if (items && items.length > 0) setSubmissions(items);
+          }),
+          subscribeToCollection<CommentItem>('comments', (items) => {
+            if (items && items.length > 0) setComments(items);
+          }),
+          subscribeToCollection<TuitionItem>('tuitions', (items) => {
+            if (items && items.length > 0) setTuitionItems(items);
+          }),
+          subscribeToCollection<BankStatement>('bankStatements', (items) => {
+            if (items && items.length > 0) setBankStatements(items);
+          }),
+          subscribeToCollection<BankTransaction>('bankTransactions', (items) => {
+            if (items && items.length > 0) setBankTransactions(items);
+          }),
+          subscribeToCollection<NotificationItem>('notifications', (items) => {
+            if (items && items.length > 0) setNotifications(items);
+          }),
           subscribeToCollection<AuditLog>('auditLogs', (items) => {
-            if (items) setAuditLogs(items);
+            if (items && items.length > 0) setAuditLogs(items);
           })
         );
 
         console.log('Firebase Cloud Firestore real-time bidirectional synchronization established.');
+        refreshFirestoreStats();
       } catch (err) {
         console.warn('Firebase initial sync note:', err);
       }
@@ -1133,7 +1231,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addStudent = (student: Omit<Student, 'id' | 'tenant_id' | 'joinedDate'>) => {
     const newStudent: Student = {
       ...student,
-      id: `stu-${Date.now()}`,
+      id: `stu-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       tenant_id: currentTenant.id,
       joinedDate: new Date().toISOString().split('T')[0],
     };
@@ -1149,6 +1247,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     });
     addAuditLog('create', 'student', newStudent.id, `Thêm học sinh mới: ${newStudent.fullName} (${newStudent.schoolCode})`);
+  };
+
+  const addBatchStudents = async (
+    newStudentsData: Array<Omit<Student, 'id' | 'tenant_id' | 'joinedDate'>>
+  ): Promise<Student[]> => {
+    if (!newStudentsData || newStudentsData.length === 0) return [];
+
+    const now = Date.now();
+    const today = new Date().toISOString().split('T')[0];
+    const createdStudents: Student[] = newStudentsData.map((data, index) => {
+      const uniqueId = `stu-${now}-${index}-${Math.random().toString(36).substring(2, 6)}`;
+      return {
+        ...data,
+        id: uniqueId,
+        tenant_id: currentTenant.id,
+        joinedDate: today,
+        status: data.status || 'active',
+      };
+    });
+
+    setStudents((prev) => [...prev, ...createdStudents]);
+
+    // Save to Firestore
+    createdStudents.forEach((student) => {
+      syncSaveToFirestore('students', student.id, student);
+    });
+
+    // Update classes with newly enrolled student IDs
+    const classToStudentsMap: Record<string, string[]> = {};
+    createdStudents.forEach((student) => {
+      student.enrolledClassIds.forEach((classId) => {
+        if (!classToStudentsMap[classId]) {
+          classToStudentsMap[classId] = [];
+        }
+        classToStudentsMap[classId].push(student.id);
+      });
+    });
+
+    if (Object.keys(classToStudentsMap).length > 0) {
+      setClasses((prev) => {
+        const updated = prev.map((c) => {
+          const toAdd = classToStudentsMap[c.id];
+          if (toAdd && toAdd.length > 0) {
+            const uniqueStudentIds = Array.from(new Set([...c.studentIds, ...toAdd]));
+            const updatedClass = { ...c, studentIds: uniqueStudentIds };
+            syncSaveToFirestore('classes', c.id, updatedClass);
+            return updatedClass;
+          }
+          return c;
+        });
+        return updated;
+      });
+    }
+
+    addAuditLog(
+      'create',
+      'student',
+      createdStudents[0].id,
+      `Nhập danh sách học sinh từ Excel: ${createdStudents.length} học sinh mới`
+    );
+
+    return createdStudents;
   };
 
   const updateStudent = (id: string, data: Partial<Student>) => {
@@ -3209,6 +3369,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Cloud sync status and manual refresh
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string>(() => new Date().toLocaleTimeString('vi-VN'));
+  const [firestoreStats, setFirestoreStats] = useState<Record<string, number>>({});
+
+  const refreshFirestoreStats = async (): Promise<Record<string, number>> => {
+    try {
+      const counts = await fetchCollectionCounts([
+        'tenants', 'schools', 'subjects', 'classes', 'students', 'parents',
+        'schedules', 'sessions', 'attendance', 'tuitions', 'homeworks', 'auditLogs',
+      ]);
+      setFirestoreStats(counts);
+      return counts;
+    } catch {
+      return {};
+    }
+  };
+
+  const pushAllLocalDataToFirestore = async (): Promise<{ success: boolean; totalWritten: number; message: string }> => {
+    setIsCloudSyncing(true);
+    try {
+      const dataMap = {
+        tenants,
+        schools,
+        subjects,
+        classes,
+        students,
+        parents,
+        parent_students: parentStudents,
+        account_invitations: accountInvitations,
+        schedules: recurringSchedules,
+        sessions: lessonSessions,
+        lessons,
+        attendance,
+        evaluations,
+        homeworks,
+        submissions,
+        comments,
+        tuitions: tuitionItems,
+        bankStatements,
+        bankTransactions,
+        notifications,
+        auditLogs,
+      };
+      const res = await pushAllDataToFirestore(dataMap);
+      setLastCloudSyncTime(new Date().toLocaleTimeString('vi-VN'));
+      await refreshFirestoreStats();
+      if (res.success) {
+        return {
+          success: true,
+          totalWritten: res.totalWritten,
+          message: `Đã kích hoạt và đồng bộ thành công ${res.totalWritten} tài liệu lên Cloud Firestore (Database: ai-studio-hthngqunldyhcthm-a29497c0-f281-4afb-91fa-18d624c5b695)!`,
+        };
+      } else {
+        return {
+          success: false,
+          totalWritten: res.totalWritten,
+          message: `Đồng bộ chưa hoàn tất: ${res.error || 'Lỗi không xác định'}`,
+        };
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        totalWritten: 0,
+        message: err.message || 'Lỗi kết nối Firestore',
+      };
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
 
   const refreshCloudData = async () => {
     setIsCloudSyncing(true);
@@ -3448,6 +3675,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         students: tenantStudents,
         allStudents: students,
         addStudent,
+        addBatchStudents,
         updateStudent,
         deleteStudent,
         parents: tenantParents,
@@ -3530,6 +3758,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         auditLogs: effectiveAuditLogs,
         allAuditLogs: auditLogs,
         refreshCloudData,
+        pushAllLocalDataToFirestore,
+        firestoreStats,
+        refreshFirestoreStats,
         importFullData,
         isCloudSyncing,
         lastCloudSyncTime,

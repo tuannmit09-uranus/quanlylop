@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { TenantSettingsPage } from './TenantSettingsPage';
 import { PaymentSettingsPage } from './PaymentSettingsPage';
 import { AuditLogPage } from './AuditLogPage';
-import { Building, ShieldAlert, CreditCard } from 'lucide-react';
+import { FirestoreDatabasePage } from './FirestoreDatabasePage';
+import { Building, ShieldAlert, CreditCard, Database } from 'lucide-react';
 
-export type SettingsTabId = 'tenant-settings' | 'payment-settings' | 'audit-logs';
+export type SettingsTabId = 'tenant-settings' | 'payment-settings' | 'audit-logs' | 'firestore-db';
 
 interface SettingsPageProps {
   initialTab?: SettingsTabId;
@@ -65,6 +66,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
         <button
           type="button"
+          onClick={() => handleTabSelect('firestore-db')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            currentTab === 'firestore-db'
+              ? 'bg-orange-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          <span>Cơ sở dữ liệu Cloud Firestore</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => handleTabSelect('audit-logs')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             currentTab === 'audit-logs'
@@ -82,6 +96,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <TenantSettingsPage onNavigateToPayment={() => handleTabSelect('payment-settings')} />
       )}
       {currentTab === 'payment-settings' && <PaymentSettingsPage />}
+      {currentTab === 'firestore-db' && <FirestoreDatabasePage />}
       {currentTab === 'audit-logs' && <AuditLogPage />}
     </div>
   );

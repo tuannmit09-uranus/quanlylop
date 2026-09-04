@@ -13,8 +13,14 @@ import {
   Edit2,
   Trash2,
   Filter,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2,
+  Upload,
 } from 'lucide-react';
 import { StudentProfileDrawer } from './StudentProfileDrawer';
+import { StudentExcelImportModal } from './StudentExcelImportModal';
+import { exportStudentSampleExcel } from '../../utils/studentExcelUtils';
 
 export const StudentManager: React.FC = () => {
   const { students, addStudent, updateStudent, deleteStudent, schools, classes } = useApp();
@@ -25,6 +31,8 @@ export const StudentManager: React.FC = () => {
 
   const [selectedStudentForDrawer, setSelectedStudentForDrawer] = useState<Student | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
 
   // Form states
   const [fullName, setFullName] = useState('');
@@ -83,7 +91,7 @@ export const StudentManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header & Action Button */}
+      {/* Header & Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900">Quản Lý Học Sinh & Phụ Huynh</h2>
@@ -91,19 +99,66 @@ export const StudentManager: React.FC = () => {
             Quản lý hồ sơ, lớp theo học, phụ huynh liên hệ và tra cứu lịch sử học tập & học phí.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setSchoolId(schools[0]?.id || '');
-            setEnrolledClasses(classes[0] ? [classes[0].id] : []);
-            setShowCreateModal(true);
-          }}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Thêm học sinh mới</span>
-        </button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Export sample Excel template */}
+          <button
+            type="button"
+            onClick={() => {
+              const activeClass = classes[0]?.name || 'K10 - Vật lý Cô Nga';
+              const activeSchool = schools[0]?.name || 'THPT Phan Bội Châu';
+              exportStudentSampleExcel(activeClass, activeSchool);
+            }}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+            title="Tải file Excel mẫu có 1 dòng dữ liệu mẫu"
+          >
+            <Download className="w-4 h-4 text-emerald-600" />
+            <span>Tải file mẫu Excel</span>
+          </button>
+
+          {/* Import Excel */}
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+            title="Nhập danh sách học sinh từ file Excel (.xlsx, .csv)"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Import Excel</span>
+          </button>
+
+          {/* Manual Add Student */}
+          <button
+            type="button"
+            onClick={() => {
+              setSchoolId(schools[0]?.id || '');
+              setEnrolledClasses(classes[0] ? [classes[0].id] : []);
+              setShowCreateModal(true);
+            }}
+            className="inline-flex items-center space-x-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Thêm học sinh mới</span>
+          </button>
+        </div>
       </div>
+
+      {/* Success Notification Banner */}
+      {importSuccessMessage && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-bold">{importSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setImportSuccessMessage(null)}
+            className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold cursor-pointer"
+          >
+            Đóng
+          </button>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
@@ -246,6 +301,64 @@ export const StudentManager: React.FC = () => {
                   </tr>
                 );
               })}
+
+              {filteredStudents.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-12 px-4 text-center">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-800">
+                        {students.length === 0
+                          ? 'Chưa có học sinh nào trong cơ sở dữ liệu'
+                          : 'Không tìm thấy học sinh nào phù hợp bộ lọc'}
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        {students.length === 0
+                          ? 'Bạn có thể tải file mẫu Excel (.xlsx), sau đó nhấn Import Excel để nạp nhanh toàn bộ danh sách học sinh vào hệ thống.'
+                          : 'Vui lòng thay đổi từ khóa tìm kiếm hoặc chọn bộ lọc Trường / Lớp khác.'}
+                      </p>
+                      {students.length === 0 && (
+                        <div className="flex items-center justify-center gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const activeClass = classes[0]?.name || 'K10 - Vật lý Cô Nga';
+                              const activeSchool = schools[0]?.name || 'THPT Phan Bội Châu';
+                              exportStudentSampleExcel(activeClass, activeSchool);
+                            }}
+                            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Tải file mẫu</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowImportModal(true)}
+                            className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            <span>Import từ Excel</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSchoolId(schools[0]?.id || '');
+                              setEnrolledClasses(classes[0] ? [classes[0].id] : []);
+                              setShowCreateModal(true);
+                            }}
+                            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Thêm thủ công</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -414,6 +527,16 @@ export const StudentManager: React.FC = () => {
           onClose={() => setSelectedStudentForDrawer(null)}
         />
       )}
+
+      {/* Excel Import Modal */}
+      <StudentExcelImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={(count) => {
+          setImportSuccessMessage(`Đã nhập thành công ${count} học sinh vào hệ thống!`);
+          setTimeout(() => setImportSuccessMessage(null), 6000);
+        }}
+      />
     </div>
   );
 };

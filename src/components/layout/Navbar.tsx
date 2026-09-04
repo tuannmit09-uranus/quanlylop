@@ -25,6 +25,8 @@ import {
   UserPlus,
   LogOut,
   Key,
+  Database,
+  UploadCloud,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -48,6 +50,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
     resetToDemoData,
     currentUser,
     setCurrentUser,
+    isCloudSyncing,
+    pushAllLocalDataToFirestore,
   } = useApp();
 
   const isAdmin = currentUser?.role === 'admin' || currentRole === 'admin';
@@ -289,6 +293,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                 <span>PH em: {currentStudent.fullName} ({currentStudent.schoolCode})</span>
               </div>
             ) : null}
+
+            {/* Cloud Firestore Status Badge & Quick Sync Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onNavigate) {
+                  onNavigate('settings');
+                }
+              }}
+              className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all cursor-pointer"
+              title="Cloud Firestore đang hoạt động. Bấm để xem chi tiết CSDL."
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <Database className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-[11px] font-bold">Firestore Live</span>
+            </button>
 
             {/* Notification Bell */}
             <div className="relative">
