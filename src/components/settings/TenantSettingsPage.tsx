@@ -441,11 +441,11 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
     setTenantToDelete(null);
     setDeleteFeedback({
       type: 'success',
-      message: `Đã xóa thành công không gian Tenant "${targetName}" và toàn bộ dữ liệu liên quan!`,
+      message: `Đã xóa vĩnh viễn không gian Tenant "${targetName}" và toàn bộ dữ liệu khỏi thiết bị và Cloud Firestore! Khi tải lại trang dữ liệu sẽ không bị khôi phục lại.`,
     });
     setTimeout(() => {
       setDeleteFeedback(null);
-    }, 4000);
+    }, 6000);
   };
 
   const handleWipeAllTenants = async () => {
@@ -1099,7 +1099,30 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
             </div>
 
             <div className="space-y-2.5 text-xs">
-              {displayedTenants.map((t) => {
+              {displayedTenants.length === 0 ? (
+                <div className="p-6 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-slate-500 space-y-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-xs text-slate-700">Chưa có Không Gian Tenant nào</p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Bạn đã xóa hết không gian Tenant hoặc chưa tạo tenant. Hãy bấm nút tạo để thêm mới.
+                    </p>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddModal(true)}
+                      className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tạo Tenant Mới</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                displayedTenants.map((t) => {
                 const isCurrentActive = t.id === currentTenant.id;
                 const isBeingEdited = t.id === editingTenantId;
 
@@ -1193,7 +1216,8 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
                     </div>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
 

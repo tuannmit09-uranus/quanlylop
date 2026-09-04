@@ -67,6 +67,12 @@ import {
   pushAllDataToFirestore,
   checkFirestoreHasData,
   fetchCollectionCounts,
+  getDeletedTenantIdsLocal,
+  recordDeletedTenantId,
+  fetchDeletedTenantIdsFromFirestore,
+  deleteTenantFromFirestore,
+  isSystemAlreadyInitialized,
+  markSystemInitialized,
 } from '../lib/firestoreSync';
 import confetti from 'canvas-confetti';
 
@@ -235,26 +241,47 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load from localStorage or Initial
   const [tenants, setTenants] = useState<Tenant[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_tenants');
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed: Tenant[] = JSON.parse(saved);
-        const cleaned = parsed.filter((t) => t.id !== 'tenant-mai' && t.id !== 'tenant-tuan' && t.id !== 'tenant-tonga');
-        if (!cleaned.some((t) => t.id === 'tenant-1788330721941')) {
-          cleaned.push(INITIAL_TENANTS[0]);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (t) =>
+              t.id !== 'tenant-mai' &&
+              t.id !== 'tenant-tuan' &&
+              t.id !== 'tenant-tonga' &&
+              !deleted.has(t.id)
+          );
         }
-        return cleaned.length > 0 ? cleaned : INITIAL_TENANTS;
       } catch {}
     }
-    return INITIAL_TENANTS;
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) {
+      return [];
+    }
+    return INITIAL_TENANTS.filter((t) => !deleted.has(t.id));
   });
 
   const [currentTenantId, setCurrentTenantId] = useState<string>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_current_tenant_id');
-    if (saved && saved !== 'tenant-mai' && saved !== 'tenant-tuan' && saved !== 'tenant-tonga') {
+    if (saved && !deleted.has(saved) && saved !== 'tenant-mai' && saved !== 'tenant-tuan' && saved !== 'tenant-tonga') {
       return saved;
     }
-    return 'tenant-1788330721941';
+    const savedTenantsStr = localStorage.getItem('edututor_tenants');
+    if (savedTenantsStr) {
+      try {
+        const parsed: Tenant[] = JSON.parse(savedTenantsStr);
+        const valid = parsed.filter((t) => !deleted.has(t.id));
+        if (valid.length > 0) return valid[0].id;
+      } catch {}
+    }
+    if (localStorage.getItem('edututor_system_initialized')) {
+      return '';
+    }
+    return deleted.has('tenant-1788330721941') ? '' : 'tenant-1788330721941';
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>('teacher');
@@ -304,78 +331,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [schools, setSchools] = useState<School[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_schools');
-    let list: School[] = INITIAL_SCHOOLS;
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
+        }
       } catch {}
     }
-    INITIAL_SCHOOLS.forEach((s) => {
-      if (!list.some((item) => item.id === s.id)) list.push(s);
-    });
-    return normalizeTenantList(list);
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_SCHOOLS.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
   });
 
   const [subjects, setSubjects] = useState<Subject[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_subjects');
-    let list: Subject[] = INITIAL_SUBJECTS;
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
+        }
       } catch {}
     }
-    INITIAL_SUBJECTS.forEach((s) => {
-      if (!list.some((item) => item.id === s.id)) list.push(s);
-    });
-    return normalizeTenantList(list);
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_SUBJECTS.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
   });
 
   const [classes, setClasses] = useState<ClassRoom[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_classes');
-    let list: ClassRoom[] = INITIAL_CLASSES;
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((c) => !c.tenant_id || !deleted.has(c.tenant_id));
+        }
       } catch {}
     }
-    INITIAL_CLASSES.forEach((c) => {
-      if (!list.some((item) => item.id === c.id)) list.push(c);
-    });
-    return normalizeTenantList(list);
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_CLASSES.filter((c) => !c.tenant_id || !deleted.has(c.tenant_id));
   });
 
   // Students list
   const [students, setStudents] = useState<Student[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_students');
-    let list: Student[] = INITIAL_STUDENTS;
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((st) => !st.tenant_id || !deleted.has(st.tenant_id));
+        }
       } catch {}
     }
-    INITIAL_STUDENTS.forEach((st) => {
-      if (!list.some((item) => item.id === st.id)) list.push(st);
-    });
-    return normalizeTenantList(list);
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_STUDENTS.filter((st) => !st.tenant_id || !deleted.has(st.tenant_id));
   });
 
   // Parents list
   const [parents, setParents] = useState<Parent[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_parents');
-    const list: Parent[] = saved ? JSON.parse(saved) : INITIAL_PARENTS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((p) => !p.tenant_id || !deleted.has(p.tenant_id));
+        }
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_PARENTS.filter((p) => !p.tenant_id || !deleted.has(p.tenant_id));
   });
 
   // ParentStudents link list
   const [parentStudents, setParentStudents] = useState<ParentStudent[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_parent_students');
-    const list: ParentStudent[] = saved ? JSON.parse(saved) : INITIAL_PARENT_STUDENTS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((ps) => !ps.tenant_id || !deleted.has(ps.tenant_id));
+        }
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_PARENT_STUDENTS.filter((ps) => !ps.tenant_id || !deleted.has(ps.tenant_id));
   });
 
   useEffect(() => {
@@ -429,81 +480,183 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentUser, students, parents, parentStudents]);
 
   const [accountInvitations, setAccountInvitations] = useState<AccountInvitation[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_account_invitations');
-    const list: AccountInvitation[] = saved ? JSON.parse(saved) : INITIAL_ACCOUNT_INVITATIONS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((a) => !a.tenant_id || !deleted.has(a.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_ACCOUNT_INVITATIONS.filter((a) => !a.tenant_id || !deleted.has(a.tenant_id));
   });
 
   const [recurringSchedules, setRecurringSchedules] = useState<RecurringSchedule[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_schedules');
-    const list: RecurringSchedule[] = saved ? JSON.parse(saved) : INITIAL_RECURRING_SCHEDULES;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_RECURRING_SCHEDULES.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
   });
 
   const [lessonSessions, setLessonSessions] = useState<LessonSession[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_sessions');
-    const list: LessonSession[] = saved ? JSON.parse(saved) : INITIAL_LESSON_SESSIONS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_LESSON_SESSIONS.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
   });
 
   const [lessons, setLessons] = useState<Lesson[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_lessons');
-    const list: Lesson[] = saved ? JSON.parse(saved) : INITIAL_LESSONS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((l) => !l.tenant_id || !deleted.has(l.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_LESSONS.filter((l) => !l.tenant_id || !deleted.has(l.tenant_id));
   });
 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_attendance');
-    const list: AttendanceRecord[] = saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((a) => !a.tenant_id || !deleted.has(a.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_ATTENDANCE.filter((a) => !a.tenant_id || !deleted.has(a.tenant_id));
   });
 
   const [evaluations, setEvaluations] = useState<StudentEvaluation[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_evaluations');
-    const list: StudentEvaluation[] = saved ? JSON.parse(saved) : INITIAL_EVALUATIONS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((e) => !e.tenant_id || !deleted.has(e.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_EVALUATIONS.filter((e) => !e.tenant_id || !deleted.has(e.tenant_id));
   });
 
   const [homeworks, setHomeworks] = useState<Homework[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_homeworks');
-    const list: Homework[] = saved ? JSON.parse(saved) : INITIAL_HOMEWORK;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((h) => !h.tenant_id || !deleted.has(h.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_HOMEWORK.filter((h) => !h.tenant_id || !deleted.has(h.tenant_id));
   });
 
   const [submissions, setSubmissions] = useState<HomeworkSubmission[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_submissions');
-    const list: HomeworkSubmission[] = saved ? JSON.parse(saved) : INITIAL_SUBMISSIONS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_SUBMISSIONS.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
   });
 
   const [comments, setComments] = useState<CommentItem[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_comments');
-    const list: CommentItem[] = saved ? JSON.parse(saved) : INITIAL_COMMENTS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((c) => !c.tenant_id || !deleted.has(c.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_COMMENTS.filter((c) => !c.tenant_id || !deleted.has(c.tenant_id));
   });
 
   const [tuitionItems, setTuitionItems] = useState<TuitionItem[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_tuitions');
-    const items: TuitionItem[] = saved ? JSON.parse(saved) : INITIAL_TUITION_ITEMS;
-    return normalizeTenantList(items);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((t) => !t.tenant_id || !deleted.has(t.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_TUITION_ITEMS.filter((t) => !t.tenant_id || !deleted.has(t.tenant_id));
   });
 
   const [bankStatements, setBankStatements] = useState<BankStatement[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_bank_statements');
-    const list: BankStatement[] = saved ? JSON.parse(saved) : [];
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((b) => !b.tenant_id || !deleted.has(b.tenant_id));
+      } catch {}
+    }
+    return [];
   });
 
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_bank_transactions');
-    const list: BankTransaction[] = saved ? JSON.parse(saved) : INITIAL_BANK_TRANSACTIONS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((b) => !b.tenant_id || !deleted.has(b.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_BANK_TRANSACTIONS.filter((b) => !b.tenant_id || !deleted.has(b.tenant_id));
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    const deleted = getDeletedTenantIdsLocal();
     const saved = localStorage.getItem('edututor_notifications');
-    const list: NotificationItem[] = saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-    return normalizeTenantList(list);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((n) => !n.tenant_id || !deleted.has(n.tenant_id));
+      } catch {}
+    }
+    const isInit = localStorage.getItem('edututor_system_initialized');
+    if (isInit) return [];
+    return INITIAL_NOTIFICATIONS.filter((n) => !n.tenant_id || !deleted.has(n.tenant_id));
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
@@ -558,10 +711,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     async function initFirestoreData() {
       try {
-        // Check if Cloud Firestore currently has documents
+        // Fetch any deleted tenant IDs recorded in Cloud Firestore
+        await fetchDeletedTenantIdsFromFirestore();
+
+        // Check if Cloud Firestore currently has documents or was already initialized
         const hasData = await checkFirestoreHasData();
         if (!hasData) {
-          console.log('Cloud Firestore is empty. Auto-seeding initial data...');
+          console.log('Cloud Firestore is empty and uninitialized. Auto-seeding initial data...');
           await pushAllDataToFirestore({
             tenants: INITIAL_TENANTS,
             schools: INITIAL_SCHOOLS,
@@ -585,76 +741,101 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             notifications: INITIAL_NOTIFICATIONS,
             auditLogs: INITIAL_AUDIT_LOGS,
           });
-          console.log('Cloud Firestore auto-seed completed.');
+          await markSystemInitialized();
+          console.log('Cloud Firestore auto-seed completed and marked initialized.');
         }
 
         // Real-time subscriptions for all operational collections
         unsubscribers.push(
           subscribeToCollection<Tenant>('tenants', (items) => {
-            if (items && items.length > 0) {
-              const cleaned = items.filter((t) => t.id !== 'tenant-mai' && t.id !== 'tenant-tuan' && t.id !== 'tenant-tonga');
-              if (cleaned.length > 0) setTenants(cleaned);
-            }
+            const deleted = getDeletedTenantIdsLocal();
+            const cleaned = (items || []).filter(
+              (t) =>
+                t.id !== 'tenant-mai' &&
+                t.id !== 'tenant-tuan' &&
+                t.id !== 'tenant-tonga' &&
+                !deleted.has(t.id)
+            );
+            setTenants(cleaned);
           }),
           subscribeToCollection<School>('schools', (items) => {
-            if (items && items.length > 0) setSchools(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setSchools((items || []).filter((s) => !s.tenant_id || !deleted.has(s.tenant_id)));
           }),
           subscribeToCollection<Subject>('subjects', (items) => {
-            if (items && items.length > 0) setSubjects(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setSubjects((items || []).filter((s) => !s.tenant_id || !deleted.has(s.tenant_id)));
           }),
           subscribeToCollection<ClassRoom>('classes', (items) => {
-            if (items && items.length > 0) setClasses(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setClasses((items || []).filter((c) => !c.tenant_id || !deleted.has(c.tenant_id)));
           }),
           subscribeToCollection<Student>('students', (items) => {
-            if (items && items.length > 0) setStudents(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setStudents((items || []).filter((s) => !s.tenant_id || !deleted.has(s.tenant_id)));
           }),
           subscribeToCollection<Parent>('parents', (items) => {
-            if (items && items.length > 0) setParents(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setParents((items || []).filter((p) => !p.tenant_id || !deleted.has(p.tenant_id)));
           }),
           subscribeToCollection<ParentStudent>('parent_students', (items) => {
-            if (items && items.length > 0) setParentStudents(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setParentStudents((items || []).filter((ps) => !ps.tenant_id || !deleted.has(ps.tenant_id)));
           }),
           subscribeToCollection<AccountInvitation>('account_invitations', (items) => {
-            if (items && items.length > 0) setAccountInvitations(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setAccountInvitations((items || []).filter((a) => !a.tenant_id || !deleted.has(a.tenant_id)));
           }),
           subscribeToCollection<RecurringSchedule>('schedules', (items) => {
-            if (items && items.length > 0) setRecurringSchedules(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setRecurringSchedules((items || []).filter((sc) => !sc.tenant_id || !deleted.has(sc.tenant_id)));
           }),
           subscribeToCollection<LessonSession>('sessions', (items) => {
-            if (items && items.length > 0) setLessonSessions(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setLessonSessions((items || []).filter((se) => !se.tenant_id || !deleted.has(se.tenant_id)));
           }),
           subscribeToCollection<Lesson>('lessons', (items) => {
-            if (items && items.length > 0) setLessons(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setLessons((items || []).filter((l) => !l.tenant_id || !deleted.has(l.tenant_id)));
           }),
           subscribeToCollection<AttendanceRecord>('attendance', (items) => {
-            if (items && items.length > 0) setAttendance(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setAttendance((items || []).filter((at) => !at.tenant_id || !deleted.has(at.tenant_id)));
           }),
           subscribeToCollection<StudentEvaluation>('evaluations', (items) => {
-            if (items && items.length > 0) setEvaluations(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setEvaluations((items || []).filter((e) => !e.tenant_id || !deleted.has(e.tenant_id)));
           }),
           subscribeToCollection<Homework>('homeworks', (items) => {
-            if (items && items.length > 0) setHomeworks(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setHomeworks((items || []).filter((h) => !h.tenant_id || !deleted.has(h.tenant_id)));
           }),
           subscribeToCollection<HomeworkSubmission>('submissions', (items) => {
-            if (items && items.length > 0) setSubmissions(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setSubmissions((items || []).filter((sub) => !sub.tenant_id || !deleted.has(sub.tenant_id)));
           }),
           subscribeToCollection<CommentItem>('comments', (items) => {
-            if (items && items.length > 0) setComments(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setComments((items || []).filter((c) => !c.tenant_id || !deleted.has(c.tenant_id)));
           }),
           subscribeToCollection<TuitionItem>('tuitions', (items) => {
-            if (items && items.length > 0) setTuitionItems(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setTuitionItems((items || []).filter((t) => !t.tenant_id || !deleted.has(t.tenant_id)));
           }),
           subscribeToCollection<BankStatement>('bankStatements', (items) => {
-            if (items && items.length > 0) setBankStatements(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setBankStatements((items || []).filter((b) => !b.tenant_id || !deleted.has(b.tenant_id)));
           }),
           subscribeToCollection<BankTransaction>('bankTransactions', (items) => {
-            if (items && items.length > 0) setBankTransactions(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setBankTransactions((items || []).filter((b) => !b.tenant_id || !deleted.has(b.tenant_id)));
           }),
           subscribeToCollection<NotificationItem>('notifications', (items) => {
-            if (items && items.length > 0) setNotifications(items);
+            const deleted = getDeletedTenantIdsLocal();
+            setNotifications((items || []).filter((n) => !n.tenant_id || !deleted.has(n.tenant_id)));
           }),
           subscribeToCollection<AuditLog>('auditLogs', (items) => {
-            if (items && items.length > 0) setAuditLogs(items);
+            setAuditLogs(items || []);
           })
         );
 
@@ -964,9 +1145,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTenant = (tenantId: string): boolean => {
+    // Record deleted tenant ID to prevent any resurrection across reloads and syncs
+    recordDeletedTenantId(tenantId);
+
     const remaining = tenants.filter((t) => t.id !== tenantId);
     setTenants(remaining);
-    syncDeleteFromFirestore('tenants', tenantId);
+    localStorage.setItem('edututor_tenants', JSON.stringify(remaining));
 
     if (currentTenantId === tenantId) {
       const nextId = remaining.length > 0 ? remaining[0].id : '';
@@ -974,82 +1158,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('edututor_current_tenant_id', nextId);
     }
 
-    // Clean up dependent collections in state & firestore for this tenant
+    // Clean up dependent collections in state & local storage for this tenant
     setClasses((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('classes', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_classes', JSON.stringify(filtered));
+      return filtered;
     });
     setStudents((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('students', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_students', JSON.stringify(filtered));
+      return filtered;
     });
     setSchools((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('schools', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_schools', JSON.stringify(filtered));
+      return filtered;
     });
     setSubjects((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('subjects', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_subjects', JSON.stringify(filtered));
+      return filtered;
     });
     setParents((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('parents', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_parents', JSON.stringify(filtered));
+      return filtered;
     });
     setParentStudents((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('parent_students', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_parent_students', JSON.stringify(filtered));
+      return filtered;
     });
     setAccountInvitations((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('account_invitations', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_account_invitations', JSON.stringify(filtered));
+      return filtered;
     });
     setRecurringSchedules((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('schedules', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_schedules', JSON.stringify(filtered));
+      return filtered;
     });
     setLessonSessions((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('sessions', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_sessions', JSON.stringify(filtered));
+      return filtered;
     });
     setLessons((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('lessons', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_lessons', JSON.stringify(filtered));
+      return filtered;
     });
     setAttendance((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('attendance', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_attendance', JSON.stringify(filtered));
+      return filtered;
     });
     setEvaluations((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('evaluations', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_evaluations', JSON.stringify(filtered));
+      return filtered;
     });
     setHomeworks((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('homeworks', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_homeworks', JSON.stringify(filtered));
+      return filtered;
     });
     setSubmissions((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('submissions', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_submissions', JSON.stringify(filtered));
+      return filtered;
     });
     setComments((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('comments', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_comments', JSON.stringify(filtered));
+      return filtered;
     });
     setTuitionItems((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('tuitions', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_tuitions', JSON.stringify(filtered));
+      return filtered;
     });
     setBankStatements((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('bankStatements', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_bank_statements', JSON.stringify(filtered));
+      return filtered;
     });
     setBankTransactions((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('bankTransactions', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_bank_transactions', JSON.stringify(filtered));
+      return filtered;
     });
     setNotifications((prev) => {
-      prev.filter((item) => item.tenant_id === tenantId).forEach((item) => syncDeleteFromFirestore('notifications', item.id));
-      return prev.filter((item) => item.tenant_id !== tenantId);
+      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
+      localStorage.setItem('edututor_notifications', JSON.stringify(filtered));
+      return filtered;
+    });
+
+    // Execute atomic cascading delete across Cloud Firestore
+    deleteTenantFromFirestore(tenantId).catch((err) => {
+      console.warn('deleteTenantFromFirestore async notice:', err);
     });
 
     addAuditLog('delete', 'tenant', tenantId, `Xóa toàn bộ Không gian Tenant: ${tenantId}`);

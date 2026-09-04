@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   deleteDoc,
@@ -8,6 +9,156 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 import { db, saveDocumentToFirestore, deleteDocumentFromFirestore, cleanDataForFirestore, OperationType, handleFirestoreError } from './firebase';
+
+/**
+ * Get locally recorded deleted tenant IDs
+ */
+export function getDeletedTenantIdsLocal(): Set<string> {
+  try {
+    const saved = localStorage.getItem('edututor_deleted_tenant_ids');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return new Set(parsed);
+    }
+  } catch {}
+  return new Set();
+}
+
+/**
+ * Record a deleted tenant ID locally and in Firestore
+ */
+export async function recordDeletedTenantId(tenantId: string): Promise<void> {
+  try {
+    const set = getDeletedTenantIdsLocal();
+    set.add(tenantId);
+    localStorage.setItem('edututor_deleted_tenant_ids', JSON.stringify(Array.from(set)));
+
+    // Record in Firestore system document so all sessions/devices respect this deletion
+    const sysDocRef = doc(db, '_system', 'deleted_tenants');
+    await setDoc(sysDocRef, {
+      [tenantId]: {
+        deletedAt: new Date().toISOString(),
+      },
+    }, { merge: true });
+  } catch (e) {
+    console.warn('recordDeletedTenantId note:', e);
+  }
+}
+
+/**
+ * Fetch list of deleted tenant IDs from Firestore
+ */
+export async function fetchDeletedTenantIdsFromFirestore(): Promise<string[]> {
+  try {
+    const sysDocRef = doc(db, '_system', 'deleted_tenants');
+    const snap = await getDoc(sysDocRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const ids = Object.keys(data || {});
+      // Sync to local
+      const local = getDeletedTenantIdsLocal();
+      ids.forEach((id) => local.add(id));
+      localStorage.setItem('edututor_deleted_tenant_ids', JSON.stringify(Array.from(local)));
+      return ids;
+    }
+  } catch (e) {
+    console.warn('fetchDeletedTenantIdsFromFirestore note:', e);
+  }
+  return Array.from(getDeletedTenantIdsLocal());
+}
+
+/**
+ * Check if the system has already been initialized (so it never auto-resurrects deleted demo data)
+ */
+export async function isSystemAlreadyInitialized(): Promise<boolean> {
+  try {
+    if (localStorage.getItem('edututor_system_initialized') === 'true') {
+      return true;
+    }
+    const initDoc = await getDoc(doc(db, '_system', 'init_status'));
+    if (initDoc.exists()) {
+      localStorage.setItem('edututor_system_initialized', 'true');
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+/**
+ * Mark system as initialized
+ */
+export async function markSystemInitialized(): Promise<void> {
+  try {
+    localStorage.setItem('edututor_system_initialized', 'true');
+    await setDoc(doc(db, '_system', 'init_status'), {
+      initialized: true,
+      initializedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (e) {
+    console.warn('markSystemInitialized note:', e);
+  }
+}
+
+/**
+ * Delete a tenant and every dependent item from Cloud Firestore completely
+ */
+export async function deleteTenantFromFirestore(tenantId: string): Promise<void> {
+  try {
+    // 1. Mark as deleted first
+    await recordDeletedTenantId(tenantId);
+
+    // 2. Delete the tenant document
+    await deleteDoc(doc(db, 'tenants', tenantId));
+
+    // 3. Dependent collections to clean up
+    const dependentCollections = [
+      'classes',
+      'students',
+      'schools',
+      'subjects',
+      'parents',
+      'parent_students',
+      'account_invitations',
+      'schedules',
+      'sessions',
+      'lessons',
+      'attendance',
+      'evaluations',
+      'homeworks',
+      'submissions',
+      'comments',
+      'tuitions',
+      'bankStatements',
+      'bankTransactions',
+      'notifications',
+    ];
+
+    for (const colName of dependentCollections) {
+      try {
+        const colSnap = await getDocs(collection(db, colName));
+        if (!colSnap.empty) {
+          const batch = writeBatch(db);
+          let count = 0;
+          colSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.tenant_id === tenantId || docSnap.id.includes(tenantId)) {
+              batch.delete(docSnap.ref);
+              count++;
+            }
+          });
+          if (count > 0) {
+            await batch.commit();
+            console.log(`Deleted ${count} items from ${colName} for tenant ${tenantId}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`Error cleaning up collection ${colName} for tenant ${tenantId}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error(`deleteTenantFromFirestore failed for ${tenantId}:`, err);
+  }
+}
 
 /**
  * Seed initial data collection into Firestore if empty
@@ -53,10 +204,16 @@ export async function seedCollectionIfEmpty<T extends { id: string }>(
 }
 
 /**
- * Check if core Firestore collections have any data
+ * Check if core Firestore collections have any data or system was already initialized
  */
 export async function checkFirestoreHasData(): Promise<boolean> {
   try {
+    // If the system has already been initialized, never auto-seed again (deletions must be respected)
+    const alreadyInit = await isSystemAlreadyInitialized();
+    if (alreadyInit) {
+      return true;
+    }
+
     const tenantsSnap = await getDocs(collection(db, 'tenants'));
     if (!tenantsSnap.empty) return true;
     const studentsSnap = await getDocs(collection(db, 'students'));
@@ -66,7 +223,7 @@ export async function checkFirestoreHasData(): Promise<boolean> {
     return false;
   } catch (e) {
     console.warn('Check Firestore data error:', e);
-    return false;
+    return true; // Default to true on error so we don't accidentally overwrite with demo data
   }
 }
 
@@ -111,6 +268,8 @@ export async function pushAllDataToFirestore(
       collections: collectionCounts,
       status: 'success',
     }, { merge: true });
+
+    await markSystemInitialized();
 
     return { success: true, totalWritten, collectionCounts };
   } catch (err: any) {
