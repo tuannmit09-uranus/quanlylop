@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import { auth } from '../../lib/firebase';
+import { getMemoryCustomCredentials } from '../../lib/firestoreSync';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -174,15 +175,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // Check custom credentials or known accounts
-    let storedCreds: Record<string, string> = {
-      'tonga190984@gmail.com': '123456a@',
-    };
-    try {
-      const custom = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
-      storedCreds = { ...storedCreds, ...custom };
-    } catch {
-      //
-    }
+    const storedCreds = getMemoryCustomCredentials();
 
     const hasCustomPassword =
       storedCreds[rawInput] ||
@@ -236,13 +229,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         if (matchedStudent) {
           setActiveStudentId(matchedStudent.id);
-          localStorage.setItem('edututor_active_student_id', matchedStudent.id);
+          try { sessionStorage.setItem('edututor_active_student_id', matchedStudent.id); } catch {}
         } else if (matchedParent) {
           const links = parentStudents.filter((ps) => ps.parent_id === matchedParent.id);
           if (links.length > 0) {
             const primary = links.find((l) => l.is_primary) || links[0];
             setActiveStudentId(primary.student_id);
-            localStorage.setItem('edututor_active_student_id', primary.student_id);
+            try { sessionStorage.setItem('edututor_active_student_id', primary.student_id); } catch {}
           }
         }
 

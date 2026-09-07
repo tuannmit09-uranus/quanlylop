@@ -73,8 +73,16 @@ import {
   deleteTenantFromFirestore,
   isSystemAlreadyInitialized,
   markSystemInitialized,
+  fetchCustomCredentialsFromFirestore,
+  saveCustomCredentialsToFirestore,
+  getMemoryCustomCredentials,
 } from '../lib/firestoreSync';
 import confetti from 'canvas-confetti';
+
+// Policy: ZERO data persistence in localStorage. Erase any legacy artifacts immediately.
+try {
+  localStorage.clear();
+} catch {}
 
 interface AppContextType {
   // Tenant & Role
@@ -239,68 +247,37 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load from localStorage or Initial
-  const [tenants, setTenants] = useState<Tenant[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_tenants');
-    if (saved !== null) {
-      try {
-        const parsed: Tenant[] = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(
-            (t) =>
-              t.id !== 'tenant-mai' &&
-              t.id !== 'tenant-tuan' &&
-              t.id !== 'tenant-tonga' &&
-              !deleted.has(t.id)
-          );
-        }
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) {
-      return [];
-    }
-    return INITIAL_TENANTS.filter((t) => !deleted.has(t.id));
-  });
+  // In-memory runtime state backed exclusively by Cloud Firestore (ZERO localStorage)
+  const [tenants, setTenants] = useState<Tenant[]>([]);
 
   const [currentTenantId, setCurrentTenantId] = useState<string>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_current_tenant_id');
-    if (saved && !deleted.has(saved) && saved !== 'tenant-mai' && saved !== 'tenant-tuan' && saved !== 'tenant-tonga') {
-      return saved;
-    }
-    const savedTenantsStr = localStorage.getItem('edututor_tenants');
-    if (savedTenantsStr) {
-      try {
-        const parsed: Tenant[] = JSON.parse(savedTenantsStr);
-        const valid = parsed.filter((t) => !deleted.has(t.id));
-        if (valid.length > 0) return valid[0].id;
-      } catch {}
-    }
-    if (localStorage.getItem('edututor_system_initialized')) {
+    try {
+      return sessionStorage.getItem('edututor_current_tenant_id') || '';
+    } catch {
       return '';
     }
-    return deleted.has('tenant-1788330721941') ? '' : 'tenant-1788330721941';
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>('teacher');
   const [activeStudentId, setActiveStudentId] = useState<string>(() => {
-    const saved = localStorage.getItem('edututor_active_student_id');
-    return saved || '';
+    try {
+      return sessionStorage.getItem('edututor_active_student_id') || '';
+    } catch {
+      return '';
+    }
   });
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: UserRole; tenant_id: string; avatar?: string } | null>(() => {
-    const saved = localStorage.getItem('edututor_current_user');
-    if (saved) {
-      try {
+    try {
+      const saved = sessionStorage.getItem('edututor_current_user');
+      if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.tenant_id === 'tenant-tuan' || parsed.tenant_id === 'tenant-tonga' || parsed.tenant_id === 'tenant-mai') {
           return null;
         }
         return parsed;
-      } catch {
-        return null;
       }
+    } catch {
+      return null;
     }
     return null;
   });
@@ -330,113 +307,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return items;
   };
 
-  const [schools, setSchools] = useState<School[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_schools');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-        }
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_SCHOOLS.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-  });
-
-  const [subjects, setSubjects] = useState<Subject[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_subjects');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-        }
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_SUBJECTS.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-  });
-
-  const [classes, setClasses] = useState<ClassRoom[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_classes');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((c) => !c.tenant_id || !deleted.has(c.tenant_id));
-        }
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_CLASSES.filter((c) => !c.tenant_id || !deleted.has(c.tenant_id));
-  });
-
-  // Students list
-  const [students, setStudents] = useState<Student[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_students');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((st) => !st.tenant_id || !deleted.has(st.tenant_id));
-        }
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_STUDENTS.filter((st) => !st.tenant_id || !deleted.has(st.tenant_id));
-  });
-
-  // Parents list
-  const [parents, setParents] = useState<Parent[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_parents');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((p) => !p.tenant_id || !deleted.has(p.tenant_id));
-        }
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_PARENTS.filter((p) => !p.tenant_id || !deleted.has(p.tenant_id));
-  });
-
-  // ParentStudents link list
-  const [parentStudents, setParentStudents] = useState<ParentStudent[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_parent_students');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((ps) => !ps.tenant_id || !deleted.has(ps.tenant_id));
-        }
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_PARENT_STUDENTS.filter((ps) => !ps.tenant_id || !deleted.has(ps.tenant_id));
-  });
+  // In-memory states populated directly from Cloud Firestore (ZERO localStorage)
+  const [schools, setSchools] = useState<School[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [classes, setClasses] = useState<ClassRoom[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [parents, setParents] = useState<Parent[]>([]);
+  const [parentStudents, setParentStudents] = useState<ParentStudent[]>([]);
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('edututor_current_user', JSON.stringify(currentUser));
+      try {
+        sessionStorage.setItem('edututor_current_user', JSON.stringify(currentUser));
+      } catch {}
       if (currentUser.role === 'admin') {
         setCurrentRole('admin');
       } else if (currentUser.tenant_id && currentUser.role === 'teacher') {
         setCurrentTenantId(currentUser.tenant_id);
-        localStorage.setItem('edututor_current_tenant_id', currentUser.tenant_id);
+        try {
+          sessionStorage.setItem('edututor_current_tenant_id', currentUser.tenant_id);
+        } catch {}
         setCurrentRole(currentUser.role);
       } else {
         setCurrentRole(currentUser.role);
@@ -454,7 +344,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         if (matched) {
           setActiveStudentId(matched.id);
-          localStorage.setItem('edututor_active_student_id', matched.id);
+          try {
+            sessionStorage.setItem('edututor_active_student_id', matched.id);
+          } catch {}
         }
       } else if (currentUser.role === 'parent') {
         const matchedPar = parents.find((p) =>
@@ -470,238 +362,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (links.length > 0) {
             const primary = links.find((l) => l.is_primary) || links[0];
             setActiveStudentId(primary.student_id);
-            localStorage.setItem('edututor_active_student_id', primary.student_id);
+            try {
+              sessionStorage.setItem('edututor_active_student_id', primary.student_id);
+            } catch {}
           }
         }
       }
     } else {
-      localStorage.removeItem('edututor_current_user');
+      try {
+        sessionStorage.removeItem('edututor_current_user');
+      } catch {}
     }
   }, [currentUser, students, parents, parentStudents]);
 
-  const [accountInvitations, setAccountInvitations] = useState<AccountInvitation[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_account_invitations');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((a) => !a.tenant_id || !deleted.has(a.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_ACCOUNT_INVITATIONS.filter((a) => !a.tenant_id || !deleted.has(a.tenant_id));
-  });
+  // Operational collections populated dynamically via Cloud Firestore listeners (ZERO localStorage)
+  const [accountInvitations, setAccountInvitations] = useState<AccountInvitation[]>([]);
+  const [recurringSchedules, setRecurringSchedules] = useState<RecurringSchedule[]>([]);
+  const [lessonSessions, setLessonSessions] = useState<LessonSession[]>([]);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [evaluations, setEvaluations] = useState<StudentEvaluation[]>([]);
+  const [homeworks, setHomeworks] = useState<Homework[]>([]);
+  const [submissions, setSubmissions] = useState<HomeworkSubmission[]>([]);
+  const [comments, setComments] = useState<CommentItem[]>([]);
 
-  const [recurringSchedules, setRecurringSchedules] = useState<RecurringSchedule[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_schedules');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_RECURRING_SCHEDULES.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-  });
-
-  const [lessonSessions, setLessonSessions] = useState<LessonSession[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_sessions');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_LESSON_SESSIONS.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-  });
-
-  const [lessons, setLessons] = useState<Lesson[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_lessons');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((l) => !l.tenant_id || !deleted.has(l.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_LESSONS.filter((l) => !l.tenant_id || !deleted.has(l.tenant_id));
-  });
-
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_attendance');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((a) => !a.tenant_id || !deleted.has(a.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_ATTENDANCE.filter((a) => !a.tenant_id || !deleted.has(a.tenant_id));
-  });
-
-  const [evaluations, setEvaluations] = useState<StudentEvaluation[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_evaluations');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((e) => !e.tenant_id || !deleted.has(e.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_EVALUATIONS.filter((e) => !e.tenant_id || !deleted.has(e.tenant_id));
-  });
-
-  const [homeworks, setHomeworks] = useState<Homework[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_homeworks');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((h) => !h.tenant_id || !deleted.has(h.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_HOMEWORK.filter((h) => !h.tenant_id || !deleted.has(h.tenant_id));
-  });
-
-  const [submissions, setSubmissions] = useState<HomeworkSubmission[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_submissions');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_SUBMISSIONS.filter((s) => !s.tenant_id || !deleted.has(s.tenant_id));
-  });
-
-  const [comments, setComments] = useState<CommentItem[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_comments');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((c) => !c.tenant_id || !deleted.has(c.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_COMMENTS.filter((c) => !c.tenant_id || !deleted.has(c.tenant_id));
-  });
-
-  const [tuitionItems, setTuitionItems] = useState<TuitionItem[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_tuitions');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((t) => !t.tenant_id || !deleted.has(t.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_TUITION_ITEMS.filter((t) => !t.tenant_id || !deleted.has(t.tenant_id));
-  });
-
-  const [bankStatements, setBankStatements] = useState<BankStatement[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_bank_statements');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((b) => !b.tenant_id || !deleted.has(b.tenant_id));
-      } catch {}
-    }
-    return [];
-  });
-
-  const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_bank_transactions');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((b) => !b.tenant_id || !deleted.has(b.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_BANK_TRANSACTIONS.filter((b) => !b.tenant_id || !deleted.has(b.tenant_id));
-  });
-
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const deleted = getDeletedTenantIdsLocal();
-    const saved = localStorage.getItem('edututor_notifications');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((n) => !n.tenant_id || !deleted.has(n.tenant_id));
-      } catch {}
-    }
-    const isInit = localStorage.getItem('edututor_system_initialized');
-    if (isInit) return [];
-    return INITIAL_NOTIFICATIONS.filter((n) => !n.tenant_id || !deleted.has(n.tenant_id));
-  });
-
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    try {
-      const saved = localStorage.getItem('edututor_audit_logs');
-      const savedTenantsStr = localStorage.getItem('edututor_tenants');
-      const baseTenants: Tenant[] = savedTenantsStr ? JSON.parse(savedTenantsStr) : INITIAL_TENANTS;
-      const baseLogs: AuditLog[] = saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
-
-      const normalizedLogs = normalizeTenantList(baseLogs);
-      const merged = [...normalizedLogs];
-
-      baseTenants.forEach((t) => {
-        const hasCreationLog = merged.some(
-          (l) => l.entityType === 'tenant' && l.entityId === t.id && l.action === 'create'
-        );
-        if (!hasCreationLog) {
-          merged.unshift({
-            id: `log-create-${t.id}`,
-            tenant_id: t.id,
-            actorId: t.id.startsWith('tenant-') ? `usr-${t.id}` : 'usr-teacher-1',
-            actorName: t.teacherName ? `Thầy/Cô ${t.teacherName}` : 'Người dùng / Giáo viên mới',
-            actorRole: 'teacher',
-            action: 'create',
-            entityType: 'tenant',
-            entityId: t.id,
-            description: `Đăng ký & Khởi tạo Không Gian Dạy Thêm (Tenant): "${t.name}" (Giáo viên: ${t.teacherName || 'Chưa đặt'}, Môn: ${t.schoolSubject || 'Chưa đặt'}, Email: ${t.email || 'N/A'}, SĐT: ${t.phone || 'N/A'})`,
-            newValue: JSON.stringify({
-              tenantId: t.id,
-              name: t.name,
-              teacherName: t.teacherName,
-              email: t.email,
-              phone: t.phone,
-              schoolSubject: t.schoolSubject,
-            }),
-            timestamp: t.created_at ? `${t.created_at} 08:30:00` : new Date().toLocaleString('vi-VN'),
-          });
-        }
-      });
-
-      return merged;
-    } catch {
-      return INITIAL_AUDIT_LOGS;
-    }
-  });
+  const [tuitionItems, setTuitionItems] = useState<TuitionItem[]>([]);
+  const [bankStatements, setBankStatements] = useState<BankStatement[]>([]);
+  const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // Initialize and Sync Firebase Cloud Firestore on mount with real-time listeners
   useEffect(() => {
@@ -711,8 +400,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     async function initFirestoreData() {
       try {
-        // Fetch any deleted tenant IDs recorded in Cloud Firestore
+        // Fetch any deleted tenant IDs and custom credentials recorded in Cloud Firestore
         await fetchDeletedTenantIdsFromFirestore();
+        await fetchCustomCredentialsFromFirestore();
 
         // Check if Cloud Firestore currently has documents or was already initialized
         const hasData = await checkFirestoreHasData();
@@ -757,6 +447,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 !deleted.has(t.id)
             );
             setTenants(cleaned);
+            setCurrentTenantId((prev) => {
+              if (prev && cleaned.some((t) => t.id === prev)) return prev;
+              const firstId = cleaned[0]?.id || '';
+              if (firstId) {
+                try {
+                  sessionStorage.setItem('edututor_current_tenant_id', firstId);
+                } catch {}
+              }
+              return firstId;
+            });
           }),
           subscribeToCollection<School>('schools', (items) => {
             const deleted = getDeletedTenantIdsLocal();
@@ -846,18 +546,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Initialize and merge default custom credentials
-    try {
-      const existing = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
-      const merged = { ...DEFAULT_CUSTOM_CREDENTIALS, ...existing };
-      if (!existing['tonga190984@gmail.com']) {
-        merged['tonga190984@gmail.com'] = '123456a@';
-      }
-      localStorage.setItem('edututor_custom_credentials', JSON.stringify(merged));
-    } catch {
-      //
-    }
-
     initFirestoreData();
 
     return () => {
@@ -868,55 +556,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     };
   }, []);
-
-  // Save to localStorage
-  useEffect(() => {
-    localStorage.setItem('edututor_tenants', JSON.stringify(tenants));
-    localStorage.setItem('edututor_current_tenant_id', currentTenantId);
-    localStorage.setItem('edututor_schools', JSON.stringify(schools));
-    localStorage.setItem('edututor_subjects', JSON.stringify(subjects));
-    localStorage.setItem('edututor_classes', JSON.stringify(classes));
-    localStorage.setItem('edututor_students', JSON.stringify(students));
-    localStorage.setItem('edututor_parents', JSON.stringify(parents));
-    localStorage.setItem('edututor_parent_students', JSON.stringify(parentStudents));
-    localStorage.setItem('edututor_account_invitations', JSON.stringify(accountInvitations));
-    localStorage.setItem('edututor_schedules', JSON.stringify(recurringSchedules));
-    localStorage.setItem('edututor_sessions', JSON.stringify(lessonSessions));
-    localStorage.setItem('edututor_lessons', JSON.stringify(lessons));
-    localStorage.setItem('edututor_attendance', JSON.stringify(attendance));
-    localStorage.setItem('edututor_evaluations', JSON.stringify(evaluations));
-    localStorage.setItem('edututor_homeworks', JSON.stringify(homeworks));
-    localStorage.setItem('edututor_submissions', JSON.stringify(submissions));
-    localStorage.setItem('edututor_comments', JSON.stringify(comments));
-    localStorage.setItem('edututor_tuitions', JSON.stringify(tuitionItems));
-    localStorage.setItem('edututor_bank_statements', JSON.stringify(bankStatements));
-    localStorage.setItem('edututor_bank_transactions', JSON.stringify(bankTransactions));
-    localStorage.setItem('edututor_notifications', JSON.stringify(notifications));
-    localStorage.setItem('edututor_audit_logs', JSON.stringify(auditLogs));
-  }, [
-    tenants,
-    currentTenantId,
-    schools,
-    subjects,
-    classes,
-    students,
-    parents,
-    parentStudents,
-    accountInvitations,
-    recurringSchedules,
-    lessonSessions,
-    lessons,
-    attendance,
-    evaluations,
-    homeworks,
-    submissions,
-    comments,
-    tuitionItems,
-    bankStatements,
-    bankTransactions,
-    notifications,
-    auditLogs,
-  ]);
 
   // Automatically calculate tuition reactively when attendance, sessions, classes or students change
   useEffect(() => {
@@ -1077,7 +716,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     setCurrentTenantId(tenantId);
-    localStorage.setItem('edututor_current_tenant_id', tenantId);
+    try {
+      sessionStorage.setItem('edututor_current_tenant_id', tenantId);
+    } catch {}
     addAuditLog('update', 'tenant', tenantId, `Chuyển sang tenant: ${tenantId}`);
   };
 
@@ -1150,110 +791,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const remaining = tenants.filter((t) => t.id !== tenantId);
     setTenants(remaining);
-    localStorage.setItem('edututor_tenants', JSON.stringify(remaining));
 
     if (currentTenantId === tenantId) {
       const nextId = remaining.length > 0 ? remaining[0].id : '';
       setCurrentTenantId(nextId);
-      localStorage.setItem('edututor_current_tenant_id', nextId);
+      try {
+        sessionStorage.setItem('edututor_current_tenant_id', nextId);
+      } catch {}
     }
 
-    // Clean up dependent collections in state & local storage for this tenant
-    setClasses((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_classes', JSON.stringify(filtered));
-      return filtered;
-    });
-    setStudents((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_students', JSON.stringify(filtered));
-      return filtered;
-    });
-    setSchools((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_schools', JSON.stringify(filtered));
-      return filtered;
-    });
-    setSubjects((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_subjects', JSON.stringify(filtered));
-      return filtered;
-    });
-    setParents((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_parents', JSON.stringify(filtered));
-      return filtered;
-    });
-    setParentStudents((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_parent_students', JSON.stringify(filtered));
-      return filtered;
-    });
-    setAccountInvitations((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_account_invitations', JSON.stringify(filtered));
-      return filtered;
-    });
-    setRecurringSchedules((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_schedules', JSON.stringify(filtered));
-      return filtered;
-    });
-    setLessonSessions((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_sessions', JSON.stringify(filtered));
-      return filtered;
-    });
-    setLessons((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_lessons', JSON.stringify(filtered));
-      return filtered;
-    });
-    setAttendance((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_attendance', JSON.stringify(filtered));
-      return filtered;
-    });
-    setEvaluations((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_evaluations', JSON.stringify(filtered));
-      return filtered;
-    });
-    setHomeworks((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_homeworks', JSON.stringify(filtered));
-      return filtered;
-    });
-    setSubmissions((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_submissions', JSON.stringify(filtered));
-      return filtered;
-    });
-    setComments((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_comments', JSON.stringify(filtered));
-      return filtered;
-    });
-    setTuitionItems((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_tuitions', JSON.stringify(filtered));
-      return filtered;
-    });
-    setBankStatements((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_bank_statements', JSON.stringify(filtered));
-      return filtered;
-    });
-    setBankTransactions((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_bank_transactions', JSON.stringify(filtered));
-      return filtered;
-    });
-    setNotifications((prev) => {
-      const filtered = prev.filter((item) => item.tenant_id !== tenantId);
-      localStorage.setItem('edututor_notifications', JSON.stringify(filtered));
-      return filtered;
-    });
+    // Clean up dependent collections in state for this tenant
+    setClasses((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setStudents((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setSchools((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setSubjects((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setParents((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setParentStudents((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setAccountInvitations((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setRecurringSchedules((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setLessonSessions((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setLessons((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setAttendance((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setEvaluations((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setHomeworks((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setSubmissions((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setComments((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setTuitionItems((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setBankStatements((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setBankTransactions((prev) => prev.filter((item) => item.tenant_id !== tenantId));
+    setNotifications((prev) => prev.filter((item) => item.tenant_id !== tenantId));
 
     // Execute atomic cascading delete across Cloud Firestore
     deleteTenantFromFirestore(tenantId).catch((err) => {
@@ -2233,7 +1799,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
 
       setActiveStudentId(stu.id);
-      localStorage.setItem('edututor_active_student_id', stu.id);
+      try {
+        sessionStorage.setItem('edututor_active_student_id', stu.id);
+      } catch {}
     } else if (inv.invitation_type === 'parent' && (val.parent || inv.parent_id)) {
       const par = val.parent || parents.find((p) => p.id === inv.parent_id);
       if (par) {
@@ -2270,14 +1838,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (links.length > 0) {
           const primary = links.find((l) => l.is_primary) || links[0];
           setActiveStudentId(primary.student_id);
-          localStorage.setItem('edututor_active_student_id', primary.student_id);
+          try {
+            sessionStorage.setItem('edututor_active_student_id', primary.student_id);
+          } catch {}
         }
       }
     }
 
-    // Persist credentials in edututor_custom_credentials for phone, email, and ID
+    // Persist credentials directly to Cloud Firestore (_system/credentials)
     try {
-      const storedCreds: Record<string, string> = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
+      const storedCreds: Record<string, string> = { ...getMemoryCustomCredentials() };
       if (inv.invitation_type === 'student' && val.student) {
         const s = val.student;
         if (s.phone) {
@@ -2306,9 +1876,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (createdUser?.email) storedCreds[createdUser.email.toLowerCase().trim()] = password;
         }
       }
-      localStorage.setItem('edututor_custom_credentials', JSON.stringify(storedCreds));
+      await saveCustomCredentialsToFirestore(storedCreds);
     } catch (saveCredErr) {
-      console.warn('Could not save activated credentials:', saveCredErr);
+      console.warn('Could not save activated credentials to Firestore:', saveCredErr);
     }
 
     confetti({
@@ -3515,9 +3085,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Reset and wipe all system tenants & data
   const resetToDemoData = async () => {
-    localStorage.clear();
-    localStorage.setItem('edututor_wiped_tenants_v4', 'true');
-    localStorage.setItem('edututor_firestore_wiped_v4', 'true');
+    try {
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch {}
     setTenants([]);
     setCurrentTenantId('');
     setSchools([]);

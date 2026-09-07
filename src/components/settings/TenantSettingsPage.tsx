@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Tenant } from '../../types';
 import { auth, saveDocumentToFirestore, uploadFileToFirebaseStorage } from '../../lib/firebase';
+import { getMemoryCustomCredentials, saveCustomCredentialsToFirestore } from '../../lib/firestoreSync';
 import {
   updatePassword,
   reauthenticateWithCredential,
@@ -282,12 +283,7 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
     }
 
     const userEmail = (currentUser?.email || activeEditingTenant.email || '').toLowerCase().trim();
-    let storedCreds: Record<string, string> = {};
-    try {
-      storedCreds = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
-    } catch {
-      storedCreds = {};
-    }
+    const storedCreds = getMemoryCustomCredentials();
     const expectedCurrentPass =
       storedCreds[userEmail] ||
       (userEmail === 'tonga190984@gmail.com' ? '123456a@' : '123456');
@@ -314,10 +310,9 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
         await updatePassword(user, newPassword);
       }
 
-      // Persist to local credentials map for teacher
+      // Persist credentials directly to Cloud Firestore
       if (userEmail) {
-        storedCreds[userEmail] = newPassword;
-        localStorage.setItem('edututor_custom_credentials', JSON.stringify(storedCreds));
+        await saveCustomCredentialsToFirestore({ [userEmail]: newPassword });
       }
 
       // Record successful change
@@ -331,10 +326,9 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
       if (err.code === 'auth/requires-recent-login') {
         setPasswordError('Phiên đăng nhập đã quá hạn. Vui lòng đăng xuất và đăng nhập lại trước khi đổi mật khẩu.');
       } else {
-        // Persist to local credentials map
+        // Persist credentials directly to Cloud Firestore
         if (userEmail) {
-          storedCreds[userEmail] = newPassword;
-          localStorage.setItem('edututor_custom_credentials', JSON.stringify(storedCreds));
+          await saveCustomCredentialsToFirestore({ [userEmail]: newPassword });
         }
         setPasswordSuccess('Đã cập nhật mật khẩu đăng nhập tài khoản hệ thống thành công!');
         setCurrentPassword('');

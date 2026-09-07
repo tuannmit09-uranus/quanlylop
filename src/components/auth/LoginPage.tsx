@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import { auth } from '../../lib/firebase';
+import { getMemoryCustomCredentials, saveCustomCredentialsToFirestore } from '../../lib/firestoreSync';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -150,14 +151,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
       effectiveName = rawInput.includes('@') ? rawInput.split('@')[0] : 'Giáo viên';
     }
 
-    // Check stored custom credentials
-    let storedCreds: Record<string, string> = {};
-    try {
-      const custom = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
-      storedCreds = { ...storedCreds, ...custom };
-    } catch {
-      //
-    }
+    // Check stored custom credentials (from memory & Cloud Firestore)
+    const storedCreds = getMemoryCustomCredentials();
 
     const hasCustomPassword =
       storedCreds[rawInput] ||
@@ -211,13 +206,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
 
         if (matchedStudent) {
           setActiveStudentId(matchedStudent.id);
-          localStorage.setItem('edututor_active_student_id', matchedStudent.id);
+          try { sessionStorage.setItem('edututor_active_student_id', matchedStudent.id); } catch {}
         } else if (matchedParent) {
           const links = parentStudents.filter((ps) => ps.parent_id === matchedParent.id);
           if (links.length > 0) {
             const primary = links.find((l) => l.is_primary) || links[0];
             setActiveStudentId(primary.student_id);
-            localStorage.setItem('edututor_active_student_id', primary.student_id);
+            try { sessionStorage.setItem('edututor_active_student_id', primary.student_id); } catch {}
           }
         }
 
@@ -343,13 +338,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
         console.info('Using direct tenant registration mode');
       }
 
-      // Save to local credentials map for persistence
+      // Save credentials directly to Cloud Firestore
       try {
-        const storedCreds = JSON.parse(localStorage.getItem('edututor_custom_credentials') || '{}');
-        storedCreds[regEmail.toLowerCase().trim()] = regPassword;
-        localStorage.setItem('edututor_custom_credentials', JSON.stringify(storedCreds));
+        await saveCustomCredentialsToFirestore({ [regEmail.toLowerCase().trim()]: regPassword });
       } catch (saveErr) {
-        console.warn('Could not save local credential:', saveErr);
+        console.warn('Could not save credential:', saveErr);
       }
 
       // Add a new Tenant/Center

@@ -10,28 +10,28 @@ import {
 } from 'firebase/firestore';
 import { db, saveDocumentToFirestore, deleteDocumentFromFirestore, cleanDataForFirestore, OperationType, handleFirestoreError } from './firebase';
 
+// In-memory runtime state (ZERO localStorage usage)
+const memoryDeletedTenantIds = new Set<string>();
+let memoryIsInitialized = false;
+let memoryCustomCredentials: Record<string, string> = {
+  'tonga190984@gmail.com': '123456a@',
+  'tuannmit09@uranustech.vn': '123456a@',
+  'tuannmit09@gmail.com': '123456a@',
+};
+
 /**
- * Get locally recorded deleted tenant IDs
+ * Get in-memory recorded deleted tenant IDs
  */
 export function getDeletedTenantIdsLocal(): Set<string> {
-  try {
-    const saved = localStorage.getItem('edututor_deleted_tenant_ids');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return new Set(parsed);
-    }
-  } catch {}
-  return new Set();
+  return memoryDeletedTenantIds;
 }
 
 /**
- * Record a deleted tenant ID locally and in Firestore
+ * Record a deleted tenant ID in-memory and in Firestore
  */
 export async function recordDeletedTenantId(tenantId: string): Promise<void> {
   try {
-    const set = getDeletedTenantIdsLocal();
-    set.add(tenantId);
-    localStorage.setItem('edututor_deleted_tenant_ids', JSON.stringify(Array.from(set)));
+    memoryDeletedTenantIds.add(tenantId);
 
     // Record in Firestore system document so all sessions/devices respect this deletion
     const sysDocRef = doc(db, '_system', 'deleted_tenants');
@@ -55,29 +55,24 @@ export async function fetchDeletedTenantIdsFromFirestore(): Promise<string[]> {
     if (snap.exists()) {
       const data = snap.data();
       const ids = Object.keys(data || {});
-      // Sync to local
-      const local = getDeletedTenantIdsLocal();
-      ids.forEach((id) => local.add(id));
-      localStorage.setItem('edututor_deleted_tenant_ids', JSON.stringify(Array.from(local)));
+      ids.forEach((id) => memoryDeletedTenantIds.add(id));
       return ids;
     }
   } catch (e) {
     console.warn('fetchDeletedTenantIdsFromFirestore note:', e);
   }
-  return Array.from(getDeletedTenantIdsLocal());
+  return Array.from(memoryDeletedTenantIds);
 }
 
 /**
  * Check if the system has already been initialized (so it never auto-resurrects deleted demo data)
  */
 export async function isSystemAlreadyInitialized(): Promise<boolean> {
+  if (memoryIsInitialized) return true;
   try {
-    if (localStorage.getItem('edututor_system_initialized') === 'true') {
-      return true;
-    }
     const initDoc = await getDoc(doc(db, '_system', 'init_status'));
     if (initDoc.exists()) {
-      localStorage.setItem('edututor_system_initialized', 'true');
+      memoryIsInitialized = true;
       return true;
     }
   } catch {}
@@ -88,8 +83,8 @@ export async function isSystemAlreadyInitialized(): Promise<boolean> {
  * Mark system as initialized
  */
 export async function markSystemInitialized(): Promise<void> {
+  memoryIsInitialized = true;
   try {
-    localStorage.setItem('edututor_system_initialized', 'true');
     await setDoc(doc(db, '_system', 'init_status'), {
       initialized: true,
       initializedAt: new Date().toISOString(),
@@ -97,6 +92,38 @@ export async function markSystemInitialized(): Promise<void> {
   } catch (e) {
     console.warn('markSystemInitialized note:', e);
   }
+}
+
+/**
+ * Fetch custom credentials from Firestore _system/credentials
+ */
+export async function fetchCustomCredentialsFromFirestore(): Promise<Record<string, string>> {
+  try {
+    const credsDoc = await getDoc(doc(db, '_system', 'credentials'));
+    if (credsDoc.exists()) {
+      const data = credsDoc.data() as Record<string, string>;
+      memoryCustomCredentials = { ...memoryCustomCredentials, ...data };
+    }
+  } catch (e) {
+    console.warn('fetchCustomCredentialsFromFirestore note:', e);
+  }
+  return memoryCustomCredentials;
+}
+
+/**
+ * Save custom credentials directly to Firestore _system/credentials
+ */
+export async function saveCustomCredentialsToFirestore(creds: Record<string, string>): Promise<void> {
+  try {
+    memoryCustomCredentials = { ...memoryCustomCredentials, ...creds };
+    await setDoc(doc(db, '_system', 'credentials'), creds, { merge: true });
+  } catch (e) {
+    console.warn('saveCustomCredentialsToFirestore note:', e);
+  }
+}
+
+export function getMemoryCustomCredentials(): Record<string, string> {
+  return memoryCustomCredentials;
 }
 
 /**
