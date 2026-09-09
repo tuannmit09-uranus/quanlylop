@@ -149,7 +149,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({
                 <h3 className="text-lg font-bold text-slate-900 leading-tight">
                   {liveStudent.fullName}
                 </h3>
-                {liveStudent.schoolCode ? (
+                {liveStudent.schoolCode && liveStudent.schoolCode !== 'NONE' ? (
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800">
                     {liveStudent.schoolCode} • K{String(liveStudent.birthYear).slice(-2)}
                   </span>
@@ -160,7 +160,9 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {liveStudent.schoolName ? `Trường ${liveStudent.schoolName}` : 'Chưa cập nhật trường'}
+                {liveStudent.schoolName && liveStudent.schoolName !== 'Chưa cập nhật'
+                  ? `Trường ${liveStudent.schoolName}`
+                  : 'Chưa cập nhật trường'}
                 {liveStudent.schoolGrade ? ` • Lớp ${liveStudent.schoolGrade}` : ''}
               </p>
             </div>
@@ -269,8 +271,8 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({
                   <div>
                     <span className="text-slate-500">Trường phổ thông:</span>
                     <p className="font-semibold text-slate-800">
-                      {liveStudent.schoolName
-                        ? `${liveStudent.schoolName} ${liveStudent.schoolCode ? `(${liveStudent.schoolCode})` : ''}`
+                      {liveStudent.schoolName && liveStudent.schoolName !== 'Chưa cập nhật'
+                        ? `${liveStudent.schoolName} ${liveStudent.schoolCode && liveStudent.schoolCode !== 'NONE' ? `(${liveStudent.schoolCode})` : ''}`
                         : 'Chưa cập nhật'}
                     </p>
                   </div>

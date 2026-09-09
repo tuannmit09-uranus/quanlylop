@@ -55,9 +55,13 @@ export const StudentManager: React.FC = () => {
       s.fullName.toLowerCase().includes(term) ||
       (s.phone && s.phone.includes(term)) ||
       (s.parentName && s.parentName.toLowerCase().includes(term));
+    const hasSchool = Boolean(
+      (s.schoolCode && s.schoolCode.trim() !== '' && s.schoolCode !== 'NONE') ||
+      (s.schoolName && s.schoolName.trim() !== '' && s.schoolName !== 'Chưa cập nhật')
+    );
     const matchesSchool =
       selectedSchoolCode === 'ALL' ||
-      (selectedSchoolCode === 'NONE' ? !s.schoolCode : s.schoolCode === selectedSchoolCode);
+      (selectedSchoolCode === 'NONE' ? !hasSchool : s.schoolCode === selectedSchoolCode);
     const matchesClass = selectedClassId === 'ALL' || s.enrolledClassIds.includes(selectedClassId);
     return matchesSearch && matchesSchool && matchesClass;
   });
@@ -66,15 +70,8 @@ export const StudentManager: React.FC = () => {
     e.preventDefault();
     if (!fullName.trim()) return;
 
-    const selectedSch = schools.find((sch) => sch.id === schoolId) || (schoolId ? {
-      id: schoolId,
-      code: '',
-      name: '',
-    } : {
-      id: '',
-      code: '',
-      name: '',
-    });
+    const isNoSchool = !schoolId || schoolId.trim() === '';
+    const selectedSch = !isNoSchool ? schools.find((sch) => sch.id === schoolId) : null;
     const birthYear = dob ? (new Date(dob).getFullYear() || 2010) : 2010;
 
     addStudent({
@@ -82,10 +79,10 @@ export const StudentManager: React.FC = () => {
       dob: dob || '',
       birthYear,
       phone: phone.trim(),
-      schoolId: selectedSch.id,
-      schoolCode: selectedSch.code,
-      schoolName: selectedSch.name,
-      schoolGrade: schoolGrade.trim(),
+      schoolId: selectedSch ? selectedSch.id : '',
+      schoolCode: selectedSch ? selectedSch.code : '',
+      schoolName: selectedSch ? selectedSch.name : '',
+      schoolGrade: selectedSch ? schoolGrade.trim() : '',
       parentName: parentName.trim(),
       parentPhone: parentPhone.trim(),
       parentEmail: parentEmail.trim(),
@@ -280,9 +277,9 @@ export const StudentManager: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4">
-                      {s.schoolName || s.schoolCode ? (
+                      {s.schoolName && s.schoolName !== 'Chưa cập nhật' ? (
                         <>
-                          <span className="font-semibold text-slate-800 block">{s.schoolName || 'Chưa rõ trường'}</span>
+                          <span className="font-semibold text-slate-800 block">{s.schoolName}</span>
                           <span className="text-[11px] text-blue-600 font-mono font-bold">
                             {s.schoolCode ? `Mã: ${s.schoolCode}` : ''} {s.schoolGrade ? `• Lớp ${s.schoolGrade}` : ''}
                           </span>
@@ -469,7 +466,13 @@ export const StudentManager: React.FC = () => {
                   <label className="font-bold text-slate-700 block mb-1">Trường phổ thông:</label>
                   <select
                     value={schoolId}
-                    onChange={(e) => setSchoolId(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSchoolId(val);
+                      if (!val) {
+                        setSchoolGrade('');
+                      }
+                    }}
                     className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden bg-white"
                   >
                     <option value="">-- Chưa cập nhật trường --</option>
@@ -487,7 +490,7 @@ export const StudentManager: React.FC = () => {
                     type="text"
                     value={schoolGrade}
                     onChange={(e) => setSchoolGrade(e.target.value)}
-                    placeholder="10A1"
+                    placeholder={schoolId ? "10A1" : "Chưa cập nhật trường"}
                     className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden"
                   />
                 </div>

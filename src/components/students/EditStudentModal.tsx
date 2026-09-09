@@ -56,8 +56,25 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
       setBirthYear(student.birthYear || (student.dob ? new Date(student.dob).getFullYear() : 2010));
       setPhone(student.phone || '');
       setEmail(student.email || '');
-      setSchoolId(student.schoolId || '');
-      setSchoolGrade(student.schoolGrade || '');
+
+      // Match school properly: by ID, code, or name
+      const matchedSch = schools.find(
+        (s) =>
+          (student.schoolId && s.id === student.schoolId) ||
+          (student.schoolCode && s.code && s.code.toLowerCase() === student.schoolCode.toLowerCase()) ||
+          (student.schoolName && s.name && s.name.toLowerCase() === student.schoolName.toLowerCase())
+      );
+
+      const hasValidSchool = Boolean(
+        student.schoolId ||
+        (student.schoolName && student.schoolName.trim() !== '' && student.schoolName !== 'Chưa cập nhật') ||
+        (student.schoolCode && student.schoolCode.trim() !== '' && student.schoolCode !== 'NONE')
+      );
+
+      const resolvedSchoolId = matchedSch ? matchedSch.id : (hasValidSchool ? (student.schoolId || '') : '');
+
+      setSchoolId(resolvedSchoolId);
+      setSchoolGrade(resolvedSchoolId ? (student.schoolGrade || '') : '');
       setParentName(student.parentName || '');
       setParentPhone(student.parentPhone || '');
       setParentEmail(student.parentEmail || '');
@@ -98,15 +115,8 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const selectedSch = schools.find((s) => s.id === schoolId) || (schoolId ? {
-      id: schoolId,
-      code: student.schoolCode || '',
-      name: student.schoolName || '',
-    } : {
-      id: '',
-      code: '',
-      name: '',
-    });
+    const isNoSchool = !schoolId || schoolId.trim() === '' || schoolId === 'NONE';
+    const selectedSch = !isNoSchool ? (schools.find((s) => s.id === schoolId) || null) : null;
 
     const updatedData: Partial<Student> = {
       fullName: fullName.trim(),
@@ -114,10 +124,10 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
       birthYear: Number(birthYear) || 2010,
       phone: phone.trim(),
       email: email.trim() || undefined,
-      schoolId: selectedSch.id,
-      schoolCode: selectedSch.code,
-      schoolName: selectedSch.name,
-      schoolGrade: schoolGrade.trim(),
+      schoolId: selectedSch ? selectedSch.id : '',
+      schoolCode: selectedSch ? selectedSch.code : '',
+      schoolName: selectedSch ? selectedSch.name : '',
+      schoolGrade: selectedSch ? schoolGrade.trim() : '',
       parentName: parentName.trim(),
       parentPhone: parentPhone.trim(),
       parentEmail: parentEmail.trim() || undefined,
@@ -300,7 +310,13 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
                 </label>
                 <select
                   value={schoolId}
-                  onChange={(e) => setSchoolId(e.target.value)}
+                  onChange={(e) => {
+                    const newSchId = e.target.value;
+                    setSchoolId(newSchId);
+                    if (!newSchId) {
+                      setSchoolGrade('');
+                    }
+                  }}
                   className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden bg-white font-medium"
                 >
                   <option value="">-- Chưa cập nhật trường --</option>
@@ -320,7 +336,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
                   type="text"
                   value={schoolGrade}
                   onChange={(e) => setSchoolGrade(e.target.value)}
-                  placeholder="Ví dụ: 10A1, 11 Lý..."
+                  placeholder={schoolId ? "Ví dụ: 10A1, 11 Lý..." : "Chưa cập nhật trường"}
                   className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden font-medium text-slate-800"
                 />
               </div>
