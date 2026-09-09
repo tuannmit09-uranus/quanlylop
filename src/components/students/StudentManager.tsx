@@ -241,6 +241,7 @@ export const StudentManager: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
               <tr>
+                <th className="py-3 px-4 w-14 text-center">STT</th>
                 <th className="py-3 px-4">Học sinh</th>
                 <th className="py-3 px-4">Trường phổ thông</th>
                 <th className="py-3 px-4">Lớp dạy thêm</th>
@@ -250,7 +251,7 @@ export const StudentManager: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {filteredStudents.map((s) => {
+              {filteredStudents.map((s, idx) => {
                 const enrolled = classes.filter((c) => s.enrolledClassIds.includes(c.id));
                 return (
                   <tr
@@ -258,6 +259,10 @@ export const StudentManager: React.FC = () => {
                     onClick={() => setSelectedStudentForDrawer(s)}
                     className="hover:bg-blue-50/40 cursor-pointer transition-colors"
                   >
+                    <td className="py-3.5 px-4 text-center text-xs font-semibold text-slate-500">
+                      {idx + 1}
+                    </td>
+
                     <td className="py-3.5 px-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs overflow-hidden">
@@ -359,7 +364,7 @@ export const StudentManager: React.FC = () => {
 
               {filteredStudents.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-12 px-4 text-center">
+                  <td colSpan={7} className="py-12 px-4 text-center">
                     <div className="max-w-md mx-auto space-y-3">
                       <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto">
                         <Users className="w-6 h-6" />
