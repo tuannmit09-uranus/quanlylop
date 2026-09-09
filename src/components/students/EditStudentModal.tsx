@@ -206,14 +206,13 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">
-                  Ngày sinh (YYYY-MM-DD) <span className="text-rose-500">*</span>
+                  Ngày sinh (YYYY-MM-DD)
                 </label>
                 <input
                   type="date"
                   value={dob}
                   onChange={handleDobChange}
                   className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden font-medium text-slate-800"
-                  required
                 />
               </div>
 
@@ -338,29 +337,27 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80">
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  Họ tên phụ huynh <span className="text-rose-500">*</span>
+                  Họ tên phụ huynh
                 </label>
                 <input
                   type="text"
                   value={parentName}
                   onChange={(e) => setParentName(e.target.value)}
-                  placeholder="Nguyễn Văn Hùng"
+                  placeholder="Nguyễn Văn Hùng (tùy chọn)"
                   className="w-full border border-slate-300 rounded-xl p-2 bg-white focus:ring-2 focus:ring-blue-500 outline-hidden font-medium"
-                  required
                 />
               </div>
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  SĐT Phụ huynh <span className="text-rose-500">*</span>
+                  SĐT Phụ huynh
                 </label>
                 <input
                   type="tel"
                   value={parentPhone}
                   onChange={(e) => setParentPhone(e.target.value)}
-                  placeholder="0988 123 456"
+                  placeholder="0988 123 456 (tùy chọn)"
                   className="w-full border border-slate-300 rounded-xl p-2 bg-white focus:ring-2 focus:ring-blue-500 outline-hidden font-medium"
-                  required
                 />
               </div>
 

@@ -66,21 +66,29 @@ export const StudentManager: React.FC = () => {
     e.preventDefault();
     if (!fullName.trim()) return;
 
-    const selectedSch = schools.find((sch) => sch.id === schoolId) || schools[0];
-    const birthYear = new Date(dob).getFullYear() || 2010;
+    const selectedSch = schools.find((sch) => sch.id === schoolId) || (schoolId ? {
+      id: schoolId,
+      code: '',
+      name: '',
+    } : {
+      id: '',
+      code: '',
+      name: '',
+    });
+    const birthYear = dob ? (new Date(dob).getFullYear() || 2010) : 2010;
 
     addStudent({
-      fullName,
-      dob,
+      fullName: fullName.trim(),
+      dob: dob || '',
       birthYear,
-      phone: phone || '0988 000 111',
+      phone: phone.trim(),
       schoolId: selectedSch.id,
       schoolCode: selectedSch.code,
       schoolName: selectedSch.name,
-      schoolGrade,
-      parentName,
-      parentPhone,
-      parentEmail,
+      schoolGrade: schoolGrade.trim(),
+      parentName: parentName.trim(),
+      parentPhone: parentPhone.trim(),
+      parentEmail: parentEmail.trim(),
       enrolledClassIds: enrolledClasses,
       status: 'active',
       notes,
@@ -89,10 +97,13 @@ export const StudentManager: React.FC = () => {
     setShowCreateModal(false);
     // Reset form
     setFullName('');
+    setDob('');
     setPhone('');
+    setSchoolGrade('');
     setParentName('');
     setParentPhone('');
     setParentEmail('');
+    setNotes('');
   };
 
   return (
@@ -440,7 +451,6 @@ export const StudentManager: React.FC = () => {
                     value={dob}
                     onChange={(e) => setDob(e.target.value)}
                     className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden"
-                    required
                   />
                 </div>
 
@@ -462,6 +472,7 @@ export const StudentManager: React.FC = () => {
                     onChange={(e) => setSchoolId(e.target.value)}
                     className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden bg-white"
                   >
+                    <option value="">-- Chưa cập nhật trường --</option>
                     {schools.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} ({s.code})
@@ -486,25 +497,23 @@ export const StudentManager: React.FC = () => {
                 <span className="font-bold text-slate-600 block">Thông tin phụ huynh</span>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="font-semibold text-slate-600 block mb-0.5">Họ tên PH:</label>
+                    <label className="font-semibold text-slate-600 block mb-0.5">Họ tên PH (tùy chọn):</label>
                     <input
                       type="text"
                       value={parentName}
                       onChange={(e) => setParentName(e.target.value)}
                       placeholder="Nguyễn Văn Hùng"
                       className="w-full border border-slate-300 rounded-xl p-2 bg-white outline-hidden"
-                      required
                     />
                   </div>
                   <div>
-                    <label className="font-semibold text-slate-600 block mb-0.5">SĐT PH:</label>
+                    <label className="font-semibold text-slate-600 block mb-0.5">SĐT PH (tùy chọn):</label>
                     <input
                       type="tel"
                       value={parentPhone}
                       onChange={(e) => setParentPhone(e.target.value)}
                       placeholder="0988 123 456"
                       className="w-full border border-slate-300 rounded-xl p-2 bg-white outline-hidden"
-                      required
                     />
                   </div>
                 </div>
