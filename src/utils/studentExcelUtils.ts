@@ -238,14 +238,10 @@ export async function parseStudentExcelFile(
       }
     }
 
-    // Default fallback school
-    const defaultSchool =
-      options.existingSchools.find((s) => s.id === options.defaultSchoolId) ||
-      options.existingSchools[0] || {
-        id: 'sch-default',
-        code: 'PT',
-        name: 'Trường Phổ Thông',
-      };
+    // Default fallback school (only if specified in options)
+    const defaultSchool = options.defaultSchoolId
+      ? options.existingSchools.find((s) => s.id === options.defaultSchoolId)
+      : null;
 
     const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
     const parsedRows: ParsedStudentRow[] = [];
@@ -277,19 +273,19 @@ export async function parseStudentExcelFile(
 
       const rawEmail = colMap.email !== undefined ? String(row[colMap.email] || '').trim() : '';
 
-      // School matching
+      // School matching (leave blank if not provided)
       const rawSchool = colMap.school !== undefined ? String(row[colMap.school] || '').trim() : '';
       let matchedSchool = options.existingSchools.find(
         (s) =>
           (rawSchool && s.name.toLowerCase().includes(rawSchool.toLowerCase())) ||
           (rawSchool && s.code.toLowerCase() === rawSchool.toLowerCase())
       );
-      if (!matchedSchool) {
-        matchedSchool = defaultSchool as School;
+      if (!matchedSchool && defaultSchool) {
+        matchedSchool = defaultSchool;
       }
 
       const rawGrade = colMap.grade !== undefined ? String(row[colMap.grade] || '').trim() : '';
-      const schoolGrade = rawGrade || '10A1';
+      const schoolGrade = rawGrade || '';
 
       // Enrolled classes matching
       const rawClass = colMap.classRoom !== undefined ? String(row[colMap.classRoom] || '').trim() : '';
@@ -319,9 +315,9 @@ export async function parseStudentExcelFile(
         }
       }
 
-      // Parents info (optional)
+      // Parents info (leave empty if not in file - DO NOT auto-fill)
       const rawParentName = colMap.parentName !== undefined ? String(row[colMap.parentName] || '').trim() : '';
-      const parentName = rawParentName || (fullName ? `Phụ huynh em ${fullName}` : 'Phụ huynh');
+      const parentName = rawParentName || '';
 
       const rawParentPhone = colMap.parentPhone !== undefined ? row[colMap.parentPhone] : '';
       const parentPhone = normalizePhoneNumber(rawParentPhone);
@@ -336,9 +332,9 @@ export async function parseStudentExcelFile(
         birthYear,
         phone,
         email: rawEmail,
-        schoolName: matchedSchool?.name || rawSchool || 'Trường Phổ Thông',
-        schoolCode: matchedSchool?.code || 'PT',
-        schoolId: matchedSchool?.id || 'sch-default',
+        schoolName: matchedSchool?.name || rawSchool || '',
+        schoolCode: matchedSchool?.code || '',
+        schoolId: matchedSchool?.id || '',
         schoolGrade,
         enrolledClassIds,
         enrolledClassNames,
@@ -362,20 +358,13 @@ export async function parseStudentExcelFile(
 /**
  * Parse a raw text list (e.g. pasted names) into ParsedStudentRow array.
  * Useful when teachers copy & paste names directly.
+ * Leaving school and parent info empty as requested.
  */
 export function parseRawStudentNames(
   rawText: string,
   options: ParseOptions
 ): ParsedStudentRow[] {
   if (!rawText.trim()) return [];
-
-  const defaultSchool =
-    options.existingSchools.find((s) => s.id === options.defaultSchoolId) ||
-    options.existingSchools[0] || {
-      id: 'sch-default',
-      code: 'PT',
-      name: 'Trường Phổ Thông',
-    };
 
   const defaultClass = options.existingClasses.find((c) => c.id === options.defaultClassId);
 
@@ -397,16 +386,16 @@ export function parseRawStudentNames(
       birthYear: defaultYear,
       phone: '',
       email: '',
-      schoolName: defaultSchool.name,
-      schoolCode: defaultSchool.code,
-      schoolId: defaultSchool.id,
-      schoolGrade: '10',
+      schoolName: '',
+      schoolCode: '',
+      schoolId: '',
+      schoolGrade: '',
       enrolledClassIds: defaultClass ? [defaultClass.id] : [],
       enrolledClassNames: defaultClass ? [defaultClass.name] : [],
-      parentName: `Phụ huynh em ${cleanName}`,
+      parentName: '',
       parentPhone: '',
       parentEmail: '',
-      notes: 'Nhập nhanh từ danh sách',
+      notes: 'Nhập nhanh từ danh sách tên',
     };
   });
 }

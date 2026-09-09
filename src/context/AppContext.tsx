@@ -1092,7 +1092,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (target) syncSaveToFirestore('students', id, target);
       return updated;
     });
-    addAuditLog('update', 'student', id, `Cập nhật thông tin học sinh ID ${id}`);
+
+    // If parent contact info was modified, keep linked primary parent record in sync
+    if (data.parentName || data.parentPhone || data.parentEmail) {
+      const primaryLink =
+        parentStudents.find((ps) => ps.student_id === id && ps.is_primary) ||
+        parentStudents.find((ps) => ps.student_id === id);
+      if (primaryLink) {
+        setParents((prev) =>
+          prev.map((p) => {
+            if (p.id === primaryLink.parent_id) {
+              const newP = {
+                ...p,
+                fullName: data.parentName || p.fullName,
+                phone: data.parentPhone || p.phone,
+                email: data.parentEmail !== undefined ? data.parentEmail : p.email,
+              };
+              syncSaveToFirestore('parents', p.id, newP);
+              return newP;
+            }
+            return p;
+          })
+        );
+      }
+    }
+
+    addAuditLog(
+      'update',
+      'student',
+      id,
+      `Cập nhật thông tin học sinh: ${data.fullName || id}`
+    );
   };
 
   const deleteStudent = (id: string) => {

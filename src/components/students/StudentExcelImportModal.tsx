@@ -43,7 +43,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
 
   // Global defaults for this import
   const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
-  const [selectedSchoolId, setSelectedSchoolId] = useState<string>(schools[0]?.id || '');
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string>('');
 
   // Quick text paste state
   const [pasteText, setPasteText] = useState<string>('');
@@ -107,7 +107,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
     }
   };
 
-  // Handler for Quick Text Paste
+  // Handler for Quick Text Paste - Mã trường và Phụ huynh để trống hoàn toàn
   const handleParsePastedText = () => {
     if (!pasteText.trim()) {
       setError('Vui lòng dán danh sách tên học sinh (mỗi học sinh 1 dòng).');
@@ -116,7 +116,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
     setError(null);
     const rows = parseRawStudentNames(pasteText, {
       defaultClassId: selectedClassId || undefined,
-      defaultSchoolId: selectedSchoolId || undefined,
+      defaultSchoolId: undefined, // Không tự động gán mã trường hay trường mặc định
       existingSchools: schools,
       existingClasses: classes,
     });
@@ -158,11 +158,11 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
           birthYear: r.birthYear,
           phone: r.phone || '',
           email: r.email || '',
-          schoolId: r.schoolId || schools[0]?.id || 'sch-default',
-          schoolCode: r.schoolCode || schools[0]?.code || 'PT',
-          schoolName: r.schoolName || schools[0]?.name || 'Trường Phổ Thông',
-          schoolGrade: r.schoolGrade || '10A1',
-          parentName: r.parentName || `Phụ huynh em ${r.fullName}`,
+          schoolId: r.schoolId || '',
+          schoolCode: r.schoolCode || '',
+          schoolName: r.schoolName || '',
+          schoolGrade: r.schoolGrade || '',
+          parentName: r.parentName || '',
           parentPhone: r.parentPhone || '',
           parentEmail: r.parentEmail || '',
           enrolledClassIds: classIds,
@@ -245,13 +245,14 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
           <div>
             <label className="font-bold text-slate-700 flex items-center space-x-1 mb-1">
               <Building className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Trường phổ thông mặc định (nếu trong file để trống):</span>
+              <span>Trường phổ thông mặc định (tùy chọn):</span>
             </label>
             <select
               value={selectedSchoolId}
               onChange={(e) => setSelectedSchoolId(e.target.value)}
               className="w-full border border-slate-300 rounded-xl p-2 bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-hidden"
             >
+              <option value="">-- Để trống (không tự động gán trường) --</option>
               {schools.map((sch) => (
                 <option key={sch.id} value={sch.id}>
                   {sch.name} ({sch.code})
@@ -259,7 +260,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
               ))}
             </select>
             <span className="text-[11px] text-slate-400 mt-0.5 block">
-              Áp dụng cho các dòng không điền cột Trường học.
+              Để trống nếu không muốn tự động thêm trường phổ thông.
             </span>
           </div>
         </div>
@@ -289,7 +290,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
               }`}
             >
               <ClipboardList className="w-3.5 h-3.5" />
-              <span>Dán danh sách tên nhanh</span>
+              <span>Dán danh sách tên học sinh</span>
             </button>
           </div>
 
@@ -348,17 +349,28 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
           )}
 
           {activeTab === 'quick_paste' && (
-            <div className="space-y-2 text-xs">
-              <label className="font-bold text-slate-700 block">
-                Dán danh sách tên học sinh (mỗi học sinh 1 dòng):
-              </label>
-              <textarea
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
-                placeholder={`Tiến Dũng\nThanh Sơn\nNam\nPhan Anh\nAnh Ngọc\nAnh Vỹ\nKhánh\nGia Hưng\nHà Anh\nGia Linh\nLâm\nPhước Nguyên\nTuấn Hưng\nTrong Nhân\nGia Bảo\nNam Khánh`}
-                rows={6}
-                className="w-full border border-slate-300 rounded-2xl p-3 focus:ring-2 focus:ring-blue-500 outline-hidden font-mono text-xs"
-              />
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-amber-50/90 border border-amber-200/80 rounded-2xl text-[11px] text-amber-900 flex items-start space-x-2">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Đặc tính dán tên:</strong> Vì không có sẵn thông tin trường và gia đình, hệ thống sẽ{' '}
+                  <strong>để trống Mã Trường, Tên Trường và Phụ Huynh</strong> (không tự động thêm dữ liệu mẫu). Thầy cô có thể cập nhật bổ sung bất kỳ lúc nào trong Hồ sơ học sinh.
+                </span>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Dán danh sách tên học sinh (mỗi học sinh 1 dòng):
+                </label>
+                <textarea
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  placeholder={`Tiến Dũng\nThanh Sơn\nNam\nPhan Anh\nAnh Ngọc\nAnh Vỹ\nKhánh\nGia Hưng\nHà Anh\nGia Linh\nLâm\nPhước Nguyên\nTuấn Hưng\nTrong Nhân\nGia Bảo\nNam Khánh`}
+                  rows={6}
+                  className="w-full border border-slate-300 rounded-2xl p-3 focus:ring-2 focus:ring-blue-500 outline-hidden font-mono text-xs"
+                />
+              </div>
+
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-400">
                   Có thể dán trực tiếp danh sách copy từ Word, Zalo, Excel...
@@ -435,10 +447,16 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
                             {r.phone || <span className="text-slate-300 italic">Trống</span>}
                           </td>
                           <td className="py-2 px-3">
-                            <span className="text-slate-800 block font-semibold">{r.schoolName}</span>
-                            <span className="text-[10px] text-blue-600 font-mono">
-                              Mã: {r.schoolCode} • Lớp {r.schoolGrade}
-                            </span>
+                            {r.schoolName || r.schoolCode ? (
+                              <>
+                                <span className="text-slate-800 block font-semibold">{r.schoolName || 'Chưa rõ trường'}</span>
+                                <span className="text-[10px] text-blue-600 font-mono">
+                                  {r.schoolCode ? `Mã: ${r.schoolCode}` : ''} {r.schoolGrade ? `• Lớp ${r.schoolGrade}` : ''}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Để trống</span>
+                            )}
                           </td>
                           <td className="py-2 px-3">
                             <div className="flex flex-wrap gap-1">
@@ -457,10 +475,16 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
                             </div>
                           </td>
                           <td className="py-2 px-3">
-                            <span className="text-slate-800 block font-semibold">{r.parentName}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {r.parentPhone || <span className="italic text-slate-300">Không có SĐT</span>}
-                            </span>
+                            {r.parentName ? (
+                              <>
+                                <span className="text-slate-800 block font-semibold">{r.parentName}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {r.parentPhone || <span className="italic text-slate-300">Không có SĐT</span>}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Để trống</span>
+                            )}
                           </td>
                           <td className="py-2 px-3 text-center">
                             <button

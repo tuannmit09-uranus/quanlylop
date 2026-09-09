@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { StudentProfileDrawer } from './StudentProfileDrawer';
 import { StudentExcelImportModal } from './StudentExcelImportModal';
+import { EditStudentModal } from './EditStudentModal';
 import { exportStudentSampleExcel } from '../../utils/studentExcelUtils';
 
 export const StudentManager: React.FC = () => {
@@ -30,9 +31,11 @@ export const StudentManager: React.FC = () => {
   const [selectedClassId, setSelectedClassId] = useState('ALL');
 
   const [selectedStudentForDrawer, setSelectedStudentForDrawer] = useState<Student | null>(null);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+  const [updateSuccessMessage, setUpdateSuccessMessage] = useState<string | null>(null);
 
   // Form states
   const [fullName, setFullName] = useState('');
@@ -47,11 +50,14 @@ export const StudentManager: React.FC = () => {
   const [notes, setNotes] = useState('');
 
   const filteredStudents = students.filter((s) => {
+    const term = searchTerm.toLowerCase();
     const matchesSearch =
-      s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.phone.includes(searchTerm) ||
-      s.parentName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesSchool = selectedSchoolCode === 'ALL' || s.schoolCode === selectedSchoolCode;
+      s.fullName.toLowerCase().includes(term) ||
+      (s.phone && s.phone.includes(term)) ||
+      (s.parentName && s.parentName.toLowerCase().includes(term));
+    const matchesSchool =
+      selectedSchoolCode === 'ALL' ||
+      (selectedSchoolCode === 'NONE' ? !s.schoolCode : s.schoolCode === selectedSchoolCode);
     const matchesClass = selectedClassId === 'ALL' || s.enrolledClassIds.includes(selectedClassId);
     return matchesSearch && matchesSchool && matchesClass;
   });
@@ -160,6 +166,22 @@ export const StudentManager: React.FC = () => {
         </div>
       )}
 
+      {updateSuccessMessage && (
+        <div className="p-3.5 bg-blue-50 border border-blue-200 text-blue-800 rounded-2xl text-xs flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="font-bold">{updateSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUpdateSuccessMessage(null)}
+            className="text-blue-600 hover:text-blue-800 text-xs font-semibold cursor-pointer"
+          >
+            Đóng
+          </button>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="relative w-full md:w-80">
@@ -181,6 +203,7 @@ export const StudentManager: React.FC = () => {
             className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-hidden font-medium"
           >
             <option value="ALL">Tất cả trường học</option>
+            <option value="NONE">Chưa cập nhật trường</option>
             {schools.map((s) => (
               <option key={s.id} value={s.code}>
                 {s.name} ({s.code})
@@ -215,7 +238,7 @@ export const StudentManager: React.FC = () => {
                 <th className="py-3 px-4">Lớp dạy thêm</th>
                 <th className="py-3 px-4">Phụ huynh & SĐT</th>
                 <th className="py-3 px-4">Trạng thái</th>
-                <th className="py-3 px-4 text-right">Chi tiết hồ sơ</th>
+                <th className="py-3 px-4 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -246,10 +269,16 @@ export const StudentManager: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <span className="font-semibold text-slate-800 block">{s.schoolName}</span>
-                      <span className="text-[11px] text-blue-600 font-mono font-bold">
-                        Mã: {s.schoolCode} • Lớp {s.schoolGrade}
-                      </span>
+                      {s.schoolName || s.schoolCode ? (
+                        <>
+                          <span className="font-semibold text-slate-800 block">{s.schoolName || 'Chưa rõ trường'}</span>
+                          <span className="text-[11px] text-blue-600 font-mono font-bold">
+                            {s.schoolCode ? `Mã: ${s.schoolCode}` : ''} {s.schoolGrade ? `• Lớp ${s.schoolGrade}` : ''}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400 italic text-xs">Chưa cập nhật</span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -266,11 +295,17 @@ export const StudentManager: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <span className="font-semibold text-slate-900 block">{s.parentName}</span>
-                      <span className="text-[11px] text-slate-500 flex items-center space-x-1">
-                        <Phone className="w-3 h-3 text-slate-400" />
-                        <span>{s.parentPhone}</span>
-                      </span>
+                      {s.parentName ? (
+                        <>
+                          <span className="font-semibold text-slate-900 block">{s.parentName}</span>
+                          <span className="text-[11px] text-slate-500 flex items-center space-x-1">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            <span>{s.parentPhone || 'Chưa có SĐT'}</span>
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400 italic text-xs">Chưa cập nhật</span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -286,17 +321,29 @@ export const StudentManager: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedStudentForDrawer(s);
-                        }}
-                        className="inline-flex items-center space-x-1 text-xs font-bold text-blue-600 hover:text-blue-700 p-1.5 rounded-lg hover:bg-blue-50"
+                      <div
+                        className="inline-flex items-center justify-end space-x-1.5"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <span>Hồ sơ</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingStudent(s)}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors shadow-2xs cursor-pointer"
+                          title="Chỉnh sửa thông tin học sinh"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Sửa</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStudentForDrawer(s)}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors shadow-2xs cursor-pointer"
+                          title="Xem hồ sơ chi tiết"
+                        >
+                          <span>Hồ sơ</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -535,6 +582,17 @@ export const StudentManager: React.FC = () => {
         onSuccess={(count) => {
           setImportSuccessMessage(`Đã nhập thành công ${count} học sinh vào hệ thống!`);
           setTimeout(() => setImportSuccessMessage(null), 6000);
+        }}
+      />
+
+      {/* Edit Student Modal */}
+      <EditStudentModal
+        isOpen={!!editingStudent}
+        onClose={() => setEditingStudent(null)}
+        student={editingStudent}
+        onSuccess={(updated) => {
+          setUpdateSuccessMessage(`Đã cập nhật thông tin học sinh "${updated.fullName}" thành công!`);
+          setTimeout(() => setUpdateSuccessMessage(null), 5000);
         }}
       />
     </div>
