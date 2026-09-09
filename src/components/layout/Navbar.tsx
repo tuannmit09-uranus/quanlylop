@@ -10,7 +10,6 @@ import {
   Bell,
   User,
   Users,
-  RotateCcw,
   Building,
   CheckCircle2,
   AlertCircle,
@@ -47,7 +46,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
     notifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
-    resetToDemoData,
     currentUser,
     setCurrentUser,
     isCloudSyncing,
@@ -507,19 +505,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                 title="Tài liệu & Hướng dẫn nghiệp vụ"
               >
                 <HelpCircle className="w-5 h-5" />
-              </button>
-            )}
-
-            {/* Reset Demo Data Button - Hidden for Student and Parent */}
-            {!isStudent && !isParent && (
-              <button
-                type="button"
-                onClick={resetToDemoData}
-                className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors border border-slate-200"
-                title="Khôi phục toàn bộ dữ liệu mẫu"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Dữ liệu mẫu</span>
               </button>
             )}
           </div>

@@ -71,8 +71,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
   const [startTime, setStartTime] = useState('18:00');
   const [endTime, setEndTime] = useState('20:00');
 
-  const [genMonth, setGenMonth] = useState(8);
-  const [genYear, setGenYear] = useState(2026);
+  const currentDate = new Date();
+  const [genMonth, setGenMonth] = useState(currentDate.getMonth() + 1);
+  const [genYear, setGenYear] = useState(currentDate.getFullYear());
 
   // Result Pop-up Modal state
   const [generationResult, setGenerationResult] = useState<GenerationResultData | null>(null);
@@ -272,9 +273,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
             onChange={(e) => setGenMonth(Number(e.target.value))}
             className="text-xs font-bold border border-blue-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer"
           >
-            {[6, 7, 8, 9, 10, 11, 12].map((m) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
               <option key={m} value={m}>
-                Tháng {m}
+                Tháng {m} {m === currentDate.getMonth() + 1 ? '(Hiện tại)' : ''}
               </option>
             ))}
           </select>
@@ -284,8 +285,13 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
             onChange={(e) => setGenYear(Number(e.target.value))}
             className="text-xs font-bold border border-blue-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer"
           >
-            <option value={2026}>Năm 2026</option>
-            <option value={2027}>Năm 2027</option>
+            {Array.from(new Set([2025, 2026, 2027, currentDate.getFullYear(), currentDate.getFullYear() + 1]))
+              .sort((a, b) => a - b)
+              .map((y) => (
+                <option key={y} value={y}>
+                  Năm {y}
+                </option>
+              ))}
           </select>
 
           <button

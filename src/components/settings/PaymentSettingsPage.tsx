@@ -6,7 +6,6 @@ import {
   CreditCard,
   User,
   Save,
-  RotateCcw,
   Sparkles,
   ShieldCheck,
   CheckCircle2,
@@ -30,7 +29,6 @@ export const PaymentSettingsPage: React.FC = () => {
     currentTenant,
     tenants,
     switchTenant,
-    resetData,
     students,
   } = useApp();
 
@@ -466,30 +464,6 @@ export const PaymentSettingsPage: React.FC = () => {
                 );
               })}
             </div>
-          </div>
-
-          {/* Reset Data Zone */}
-          <div className="bg-slate-50 rounded-3xl p-5 border border-slate-200 space-y-3">
-            <h4 className="font-bold text-slate-900 text-xs flex items-center space-x-1.5">
-              <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
-              <span>Khôi Phục Dữ Liệu Ban Đầu</span>
-            </h4>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Đặt lại toàn bộ dữ liệu mẫu (trường học, học sinh, điểm danh, bảng kê học phí, sao kê ngân hàng) về trạng thái ban đầu để kiểm thử.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm('Bạn có chắc muốn đặt lại toàn bộ dữ liệu về trạng thái ban đầu?')) {
-                  resetData();
-                  alert('Đã khôi phục toàn bộ dữ liệu mẫu thành công!');
-                }
-              }}
-              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Đặt lại dữ liệu mẫu</span>
-            </button>
           </div>
         </div>
       </div>

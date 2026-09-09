@@ -37,12 +37,17 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
     classes,
   } = useApp();
 
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth() + 1;
+  const currentYear = currentDate.getFullYear();
+  const todayStr = currentDate.toISOString().split('T')[0];
+
   const [selectedClassId, setSelectedClassId] = useState<string>(initialFilter?.classId || 'ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>(
-    initialFilter?.month !== undefined ? String(initialFilter.month) : '8'
+    initialFilter?.month !== undefined ? String(initialFilter.month) : String(currentMonth)
   );
   const [selectedYear, setSelectedYear] = useState<string>(
-    initialFilter?.year !== undefined ? String(initialFilter.year) : '2026'
+    initialFilter?.year !== undefined ? String(initialFilter.year) : String(currentYear)
   );
   const [selectedType, setSelectedType] = useState<string>(initialFilter?.sessionType || 'ALL');
 
@@ -60,15 +65,15 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
   const [cancelModalSession, setCancelModalSession] = useState<LessonSession | null>(null);
   const [cancelReason, setCancelReason] = useState('Giáo viên đi công tác chấm thi');
   const [createMakeup, setCreateMakeup] = useState(true);
-  const [makeupDate, setMakeupDate] = useState('2026-08-15');
+  const [makeupDate, setMakeupDate] = useState(todayStr);
 
   const [rescheduleModalSession, setRescheduleModalSession] = useState<LessonSession | null>(null);
-  const [rescheduleDate, setRescheduleDate] = useState('2026-08-28');
+  const [rescheduleDate, setRescheduleDate] = useState(todayStr);
   const [rescheduleReason, setRescheduleReason] = useState('Đổi lịch học do trùng lịch kiểm tra ở trường');
 
   const [showExtraModal, setShowExtraModal] = useState(false);
   const [extraClassId, setExtraClassId] = useState(classes[0]?.id || '');
-  const [extraDate, setExtraDate] = useState('2026-08-25');
+  const [extraDate, setExtraDate] = useState(todayStr);
   const [extraTimeStart, setExtraTimeStart] = useState('14:00');
   const [extraTimeEnd, setExtraTimeEnd] = useState('16:00');
   const [extraReason, setExtraReason] = useState('Buổi tăng cường giải đề chuyên sâu');
@@ -186,7 +191,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
                 <option value="ALL">Tất cả tháng</option>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
                   <option key={m} value={String(m)}>
-                    Tháng {m} {m === 8 ? '(Tháng 8/2026)' : ''}
+                    Tháng {m} {m === currentMonth ? '(Hiện tại)' : ''}
                   </option>
                 ))}
               </select>
@@ -199,8 +204,13 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
               className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer"
             >
               <option value="ALL">Tất cả năm</option>
-              <option value="2026">Năm 2026</option>
-              <option value="2027">Năm 2027</option>
+              {Array.from(new Set([2025, 2026, 2027, currentYear, currentYear + 1]))
+                .sort((a, b) => a - b)
+                .map((y) => (
+                  <option key={y} value={String(y)}>
+                    Năm {y}
+                  </option>
+                ))}
             </select>
 
             {/* Class filter */}

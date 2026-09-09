@@ -40,9 +40,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     currentTenant,
   } = useApp();
 
-  // Selected Month & Year for Dashboard calculations (default 7/2026 or current active)
-  const [selectedMonth, setSelectedMonth] = useState<number>(7);
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  // Selected Month & Year for Dashboard calculations (defaults to current month and year)
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
 
   // Calculations
   const activeStudents = students.filter((s) => s.status === 'active').length;
@@ -149,11 +150,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
                 className="bg-slate-900/90 text-white font-bold text-xs rounded-xl px-3 py-2 border border-blue-400/40 outline-hidden cursor-pointer"
               >
-                {[2025, 2026, 2027].map((y) => (
-                  <option key={y} value={y}>
-                    Năm {y}
-                  </option>
-                ))}
+                {Array.from(new Set([2025, 2026, 2027, currentDate.getFullYear(), currentDate.getFullYear() + 1]))
+                  .sort((a, b) => a - b)
+                  .map((y) => (
+                    <option key={y} value={y}>
+                      Năm {y}
+                    </option>
+                  ))}
               </select>
             </div>
             <span className="text-[11px] text-blue-300 block">
