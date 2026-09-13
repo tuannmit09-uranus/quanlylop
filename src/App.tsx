@@ -52,6 +52,7 @@ const AppContent: React.FC = () => {
     month?: number;
     year?: number;
     schoolCode?: string;
+    classId?: string;
     status?: string;
   } | null>(null);
   const [reconciliationFilterParams, setReconciliationFilterParams] = useState<{
@@ -219,10 +220,11 @@ const AppContent: React.FC = () => {
       }
       return (
         <TuitionPage
-          key={`tuition-${tuitionFilterParams?.month || 'default'}-${tuitionFilterParams?.year || 'default'}`}
+          key={`tuition-${tuitionFilterParams?.month || 'default'}-${tuitionFilterParams?.year || 'default'}-${tuitionFilterParams?.classId || 'default'}`}
           initialMonth={tuitionFilterParams?.month}
           initialYear={tuitionFilterParams?.year}
           initialSchool={tuitionFilterParams?.schoolCode}
+          initialClassId={tuitionFilterParams?.classId}
           initialStatus={tuitionFilterParams?.status}
         />
       );

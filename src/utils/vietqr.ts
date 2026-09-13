@@ -149,9 +149,28 @@ export function formatVND(amount: number): string {
 
 /**
  * Format Day of Week in Vietnamese
+ * Accepts day number (0-6) or ISO date string (YYYY-MM-DD)
  */
-export function formatDayOfWeek(day: number): string {
-  switch (day) {
+export function formatDayOfWeek(day: number | string): string {
+  let dayNum: number;
+  if (typeof day === 'string') {
+    if (day.includes('-')) {
+      const parts = day.split('-').map(Number);
+      if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+        // new Date(year, monthIndex, day) avoids UTC offset issues
+        dayNum = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+      } else {
+        const parsed = new Date(day).getDay();
+        dayNum = isNaN(parsed) ? 1 : parsed;
+      }
+    } else {
+      dayNum = Number(day);
+    }
+  } else {
+    dayNum = day;
+  }
+
+  switch (dayNum) {
     case 0:
       return 'Chủ Nhật';
     case 1:
@@ -169,6 +188,18 @@ export function formatDayOfWeek(day: number): string {
     default:
       return 'Thứ 2';
   }
+}
+
+/**
+ * Format date YYYY-MM-DD to DD/MM/YYYY
+ */
+export function formatDateVN(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
 }
 
 /**

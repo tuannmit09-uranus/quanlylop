@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AttendanceStatus } from '../../types';
+import { formatDayOfWeek, formatDateVN } from '../../utils/vietqr';
 import {
   CheckCircle2,
   XCircle,
@@ -197,16 +198,20 @@ export const AttendanceManager: React.FC = () => {
               value={selectedSessionId}
               onChange={(e) => setSelectedSessionId(e.target.value)}
               disabled={activeSessions.length === 0}
-              className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer text-slate-800 disabled:opacity-60 disabled:cursor-not-allowed min-w-[240px]"
+              className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer text-slate-800 disabled:opacity-60 disabled:cursor-not-allowed min-w-[300px]"
             >
               {activeSessions.length === 0 ? (
                 <option value="">(Không có buổi học nào trong tháng này)</option>
               ) : (
-                activeSessions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.date} ({s.startTime} - {s.endTime}) - {formatSessionTypeName(s.sessionType)}
-                  </option>
-                ))
+                activeSessions.map((s) => {
+                  const dayName = formatDayOfWeek(s.dayOfWeek ?? s.date);
+                  const formattedDate = formatDateVN(s.date);
+                  return (
+                    <option key={s.id} value={s.id}>
+                      {dayName}, {formattedDate} ({s.startTime} - {s.endTime}) - {formatSessionTypeName(s.sessionType)}
+                    </option>
+                  );
+                })
               )}
             </select>
           </div>
@@ -252,12 +257,12 @@ export const AttendanceManager: React.FC = () => {
       </div>
 
       {/* Unmarked Session Notice */}
-      {selectedSessionId && unmarkedCount === classStudents.length && classStudents.length > 0 && (
+      {selectedSessionId && unmarkedCount === classStudents.length && classStudents.length > 0 && currentSession && (
         <div className="bg-blue-50/70 border border-blue-200 text-blue-900 rounded-2xl p-4 text-xs flex items-center justify-between gap-3">
           <div className="flex items-center space-x-2.5">
             <HelpCircle className="w-4 h-4 text-blue-600 shrink-0" />
             <span>
-              Buổi học ngày <strong>{currentSession?.date}</strong> hiện <strong>chưa ghi nhận điểm danh</strong>. Thầy/Cô hãy tích chọn trạng thái bên dưới hoặc bấm <strong>"Điểm danh có mặt tất cả"</strong> để lưu nhanh.
+              Buổi học <strong>{formatDayOfWeek(currentSession.dayOfWeek ?? currentSession.date)}, ngày {formatDateVN(currentSession.date)}</strong> ({currentSession.startTime} - {currentSession.endTime}) hiện <strong>chưa ghi nhận điểm danh</strong>. Thầy/Cô hãy tích chọn trạng thái bên dưới hoặc bấm <strong>"Điểm danh có mặt tất cả"</strong> để lưu nhanh.
             </span>
           </div>
         </div>
@@ -278,6 +283,26 @@ export const AttendanceManager: React.FC = () => {
         </div>
       ) : (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+          {currentSession && (
+            <div className="bg-slate-50/90 px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center space-x-2 text-xs">
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-blue-100/80 text-blue-800 font-bold border border-blue-200">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{formatDayOfWeek(currentSession.dayOfWeek ?? currentSession.date)}, {formatDateVN(currentSession.date)}</span>
+                </span>
+                <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 font-semibold border border-slate-200">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{currentSession.startTime} - {currentSession.endTime}</span>
+                </span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700">
+                  {formatSessionTypeName(currentSession.sessionType)}
+                </span>
+              </div>
+              <span className="text-xs text-slate-500 font-medium">
+                Sĩ số lớp: <strong className="text-slate-800">{classStudents.length} học sinh</strong>
+              </span>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">

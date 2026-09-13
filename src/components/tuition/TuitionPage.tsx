@@ -21,6 +21,7 @@ export interface TuitionPageProps {
   initialMonth?: number;
   initialYear?: number;
   initialSchool?: string;
+  initialClassId?: string;
   initialStatus?: string;
 }
 
@@ -28,6 +29,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   initialMonth,
   initialYear,
   initialSchool,
+  initialClassId,
   initialStatus,
 }) => {
   const {
@@ -39,15 +41,30 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
     classes,
   } = useApp();
 
-  // Pick month from props or existing data (default 7/2026 or current active)
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth() + 1;
+  const currentYear = currentDate.getFullYear();
+
+  // Pick month from props or existing data, default to current month / year
   const defaultMonth =
-    initialMonth ?? (tuitionItems.length > 0 ? tuitionItems[0].periodMonth : 7);
+    initialMonth ??
+    (tuitionItems.some((t) => t.periodMonth === currentMonth && t.periodYear === currentYear)
+      ? currentMonth
+      : tuitionItems.length > 0
+      ? tuitionItems[0].periodMonth
+      : currentMonth);
   const defaultYear =
-    initialYear ?? (tuitionItems.length > 0 ? tuitionItems[0].periodYear : 2026);
+    initialYear ??
+    (tuitionItems.some((t) => t.periodMonth === currentMonth && t.periodYear === currentYear)
+      ? currentYear
+      : tuitionItems.length > 0
+      ? tuitionItems[0].periodYear
+      : currentYear);
 
   const [selectedMonth, setSelectedMonth] = useState<number>(defaultMonth);
   const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
   const [selectedSchool, setSelectedSchool] = useState<string>(initialSchool || 'ALL');
+  const [selectedClassId, setSelectedClassId] = useState<string>(initialClassId || 'ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus || 'ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [isCalculating, setIsCalculating] = useState(false);
@@ -57,20 +74,22 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
     if (initialMonth !== undefined) setSelectedMonth(initialMonth);
     if (initialYear !== undefined) setSelectedYear(initialYear);
     if (initialSchool !== undefined) setSelectedSchool(initialSchool);
+    if (initialClassId !== undefined) setSelectedClassId(initialClassId);
     if (initialStatus !== undefined) setSelectedStatus(initialStatus);
-  }, [initialMonth, initialYear, initialSchool, initialStatus]);
+  }, [initialMonth, initialYear, initialSchool, initialClassId, initialStatus]);
 
   const [selectedTuitionForQR, setSelectedTuitionForQR] = useState<TuitionItem | null>(null);
 
   const filteredTuitions = tuitionItems.filter((t) => {
     const matchesMonth = t.periodMonth === selectedMonth && t.periodYear === selectedYear;
     const matchesSchool = selectedSchool === 'ALL' || t.schoolCode === selectedSchool;
+    const matchesClass = selectedClassId === 'ALL' || t.classId === selectedClassId;
     const matchesStatus = selectedStatus === 'ALL' || t.status === selectedStatus;
     const matchesSearch =
       t.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.paymentReference.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.className.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesMonth && matchesSchool && matchesStatus && matchesSearch;
+    return matchesMonth && matchesSchool && matchesClass && matchesStatus && matchesSearch;
   });
 
   const totalExpected = filteredTuitions.reduce((acc, cur) => acc + cur.totalAmount, 0);
@@ -83,12 +102,18 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
 
   const handleCalculateTuition = () => {
     setIsCalculating(true);
-    calculateTuitionForMonth?.(selectedMonth, selectedYear);
+    calculateTuitionForMonth?.(
+      selectedMonth,
+      selectedYear,
+      selectedClassId !== 'ALL' ? selectedClassId : undefined
+    );
     setTimeout(() => {
       setIsCalculating(false);
+      const selectedClass = classes.find((c) => c.id === selectedClassId);
+      const classNameStr = selectedClass ? ` cho lớp ${selectedClass.name}` : '';
       setToastMessage({
         title: 'Đã tổng hợp & tính học phí thành công!',
-        desc: `Bảng kê Tháng ${selectedMonth}/${selectedYear} đã được tính tự động từ lịch điểm danh thực tế.`,
+        desc: `Bảng kê Tháng ${selectedMonth}/${selectedYear}${classNameStr} đã được tính tự động từ lịch điểm danh thực tế.`,
       });
     }, 300);
   };
@@ -114,13 +139,18 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-bold text-slate-900">
               Bảng Kê & Tính Học Phí Tháng {selectedMonth}/{selectedYear}
             </h2>
             <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
               {filteredTuitions.length} học sinh
             </span>
+            {selectedClassId !== 'ALL' && (
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                {classes.find((c) => c.id === selectedClassId)?.name || 'Lớp đã chọn'}
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             BR-009 & BR-010: Tự động tổng hợp số buổi học thực tế (fee_eligible), nhân đơn giá và sinh mã VietQR chuyển khoản chuẩn.
@@ -135,7 +165,13 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
             className="inline-flex items-center space-x-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isCalculating ? 'animate-spin' : ''}`} />
-            <span>{isCalculating ? 'Đang tính toán...' : `Tính lại học phí T${selectedMonth}/${selectedYear}`}</span>
+            <span>
+              {isCalculating
+                ? 'Đang tính toán...'
+                : selectedClassId !== 'ALL'
+                ? `Tính lại học phí ${classes.find((c) => c.id === selectedClassId)?.name || 'lớp'} (T${selectedMonth}/${selectedYear})`
+                : `Tính lại học phí T${selectedMonth}/${selectedYear}`}
+            </span>
           </button>
 
           <button
@@ -178,61 +214,103 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
 
       {/* Search and Filters */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Month selector */}
-          <div className="flex items-center space-x-1">
-            <span className="text-xs font-semibold text-slate-500">Kỳ thu:</span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Kỳ thu selector */}
+          <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
+            <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-700">Kỳ thu:</span>
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden"
+              className="text-xs font-bold bg-transparent border-0 focus:ring-0 outline-hidden cursor-pointer text-blue-700"
             >
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
                 <option key={m} value={m}>
-                  Tháng {m}
+                  Tháng {m} {m === currentMonth && selectedYear === currentYear ? '(Hiện tại)' : ''}
+                </option>
+              ))}
+            </select>
+            <span className="text-slate-300">/</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="text-xs font-bold bg-transparent border-0 focus:ring-0 outline-hidden cursor-pointer text-slate-700"
+            >
+              {Array.from(new Set([2025, 2026, 2027, currentYear, currentYear + 1]))
+                .sort((a, b) => a - b)
+                .map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Lớp học filter */}
+          <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
+            <span className="text-xs font-bold text-slate-700">Lớp học:</span>
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              className="text-xs font-bold bg-transparent border-0 focus:ring-0 outline-hidden cursor-pointer text-slate-800"
+            >
+              <option value="ALL">Tất cả lớp học</option>
+              {classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.name}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Year selector */}
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden"
-          >
-            {[2025, 2026, 2027].map((y) => (
-              <option key={y} value={y}>
-                Năm {y}
-              </option>
-            ))}
-          </select>
-
           {/* School filter */}
-          <select
-            value={selectedSchool}
-            onChange={(e) => setSelectedSchool(e.target.value)}
-            className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden"
-          >
-            <option value="ALL">Tất cả trường học</option>
-            {schools.map((s) => (
-              <option key={s.id} value={s.code}>
-                {s.name} ({s.code})
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
+            <span className="text-xs font-bold text-slate-700">Trường:</span>
+            <select
+              value={selectedSchool}
+              onChange={(e) => setSelectedSchool(e.target.value)}
+              className="text-xs font-bold bg-transparent border-0 focus:ring-0 outline-hidden cursor-pointer text-slate-800"
+            >
+              <option value="ALL">Tất cả trường học</option>
+              {schools.map((s) => (
+                <option key={s.id} value={s.code}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Status filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden"
-          >
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="unpaid">Chưa nộp (Unpaid)</option>
-            <option value="paid">Đã nộp (Paid)</option>
-            <option value="partial">Nộp một phần</option>
-          </select>
+          <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
+            <span className="text-xs font-bold text-slate-700">Trạng thái:</span>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="text-xs font-bold bg-transparent border-0 focus:ring-0 outline-hidden cursor-pointer text-slate-800"
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="unpaid">Chưa nộp (Unpaid)</option>
+              <option value="paid">Đã nộp (Paid)</option>
+              <option value="partial">Nộp một phần</option>
+            </select>
+          </div>
+
+          {/* Reset filter button if any filter is active */}
+          {(selectedClassId !== 'ALL' || selectedSchool !== 'ALL' || selectedStatus !== 'ALL' || searchTerm !== '') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedClassId('ALL');
+                setSelectedSchool('ALL');
+                setSelectedStatus('ALL');
+                setSearchTerm('');
+              }}
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline px-2 py-1 cursor-pointer"
+              title="Đặt lại các bộ lọc"
+            >
+              ✕ Đặt lại lọc
+            </button>
+          )}
         </div>
 
         <div className="relative w-full sm:w-64">
@@ -257,9 +335,10 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
             <div>
               <h3 className="text-base font-bold text-slate-900">
                 Chưa có dữ liệu bảng kê cho Tháng {selectedMonth}/{selectedYear}
+                {selectedClassId !== 'ALL' ? ` (${classes.find((c) => c.id === selectedClassId)?.name})` : ''}
               </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-                Không tìm thấy bảng kê học phí cho kỳ thu này. Bạn có thể nhấn nút dưới đây để hệ thống tự động tổng hợp số buổi học và tạo bảng kê.
+                Không tìm thấy bảng kê học phí cho kỳ thu này {selectedClassId !== 'ALL' ? 'thuộc lớp đã chọn' : ''}. Bạn có thể nhấn nút dưới đây để hệ thống tự động tổng hợp số buổi học và tạo bảng kê.
               </p>
             </div>
             <button
@@ -269,7 +348,13 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
               className="inline-flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
-              <span>{isCalculating ? 'Đang xử lý...' : `Tự động tính bảng kê Tháng ${selectedMonth}/${selectedYear}`}</span>
+              <span>
+                {isCalculating
+                  ? 'Đang xử lý...'
+                  : selectedClassId !== 'ALL'
+                  ? `Tự động tính bảng kê ${classes.find((c) => c.id === selectedClassId)?.name || 'lớp này'} (T${selectedMonth}/${selectedYear})`
+                  : `Tự động tính bảng kê Tháng ${selectedMonth}/${selectedYear}`}
+              </span>
             </button>
           </div>
         ) : (
