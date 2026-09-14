@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Student, ParentRelationship } from '../../types';
 import { useApp } from '../../context/AppContext';
-import { formatVND } from '../../utils/vietqr';
+import { formatVND, formatDayOfWeek, formatDateVN } from '../../utils/vietqr';
 import {
   X,
   User,
@@ -882,43 +882,102 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({
               </div>
 
               <div className="space-y-2">
-                {studentAttendance.map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs"
-                  >
-                    <div className="flex items-center space-x-2">
-                      {a.status === 'present' ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      ) : a.status === 'excused' ? (
-                        <Clock className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-red-600" />
-                      )}
-                      <div>
-                        <span className="font-semibold text-slate-800">
-                          Buổi học: {a.sessionId}
-                        </span>
-                        {a.note && <p className="text-[11px] text-slate-500">{a.note}</p>}
-                      </div>
-                    </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full font-semibold text-[11px] ${
-                        a.status === 'present'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : a.status === 'excused'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {a.status === 'present'
-                        ? 'Có mặt'
-                        : a.status === 'excused'
-                        ? 'Nghỉ có phép'
-                        : 'Vắng không phép'}
-                    </span>
+                {studentAttendance.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-xs">Chưa có dữ liệu điểm danh cho học sinh này</p>
                   </div>
-                ))}
+                ) : (
+                  [...studentAttendance]
+                    .sort((a, b) => {
+                      const sesA = lessonSessions.find((s) => s.id === a.sessionId);
+                      const sesB = lessonSessions.find((s) => s.id === b.sessionId);
+                      const dateA = sesA?.date || (a.sessionId.match(/(\d{4})(\d{2})(\d{2})/) ? a.sessionId.replace(/.*(\d{4})(\d{2})(\d{2}).*/, '$1-$2-$3') : '');
+                      const dateB = sesB?.date || (b.sessionId.match(/(\d{4})(\d{2})(\d{2})/) ? b.sessionId.replace(/.*(\d{4})(\d{2})(\d{2}).*/, '$1-$2-$3') : '');
+                      return dateB.localeCompare(dateA);
+                    })
+                    .map((a) => {
+                      const session = lessonSessions.find((s) => s.id === a.sessionId);
+                      let sessionTitle = '';
+                      let timeString = '';
+                      let classNameStr = '';
+
+                      if (session) {
+                        sessionTitle = `${formatDayOfWeek(session.dayOfWeek)} - ${formatDateVN(session.date)}`;
+                        timeString = `${session.startTime} - ${session.endTime}`;
+                        classNameStr = session.className;
+                      } else {
+                        // Fallback in case session object is not in current list
+                        const dateMatch = a.sessionId.match(/(\d{4})(\d{2})(\d{2})/);
+                        if (dateMatch) {
+                          const dateStr = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+                          const d = new Date(dateStr);
+                          const dow = !isNaN(d.getTime()) ? (d.getDay() as any) : undefined;
+                          sessionTitle = `${dow !== undefined ? formatDayOfWeek(dow) + ' - ' : ''}${formatDateVN(dateStr)}`;
+                        } else {
+                          sessionTitle = a.sessionId;
+                        }
+                      }
+
+                      return (
+                        <div
+                          key={a.id}
+                          className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs hover:bg-slate-100/70 transition-colors"
+                        >
+                          <div className="flex items-center space-x-2.5">
+                            {a.status === 'present' ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            ) : a.status === 'excused' ? (
+                              <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                            )}
+                            <div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-bold text-slate-800">
+                                  Buổi học: {sessionTitle}
+                                </span>
+                                {timeString && (
+                                  <span className="text-[11px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                    {timeString}
+                                  </span>
+                                )}
+                                {classNameStr && (
+                                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                    {classNameStr}
+                                  </span>
+                                )}
+                                {session && session.sessionType !== 'regular' && (
+                                  <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                    {session.sessionType === 'make_up'
+                                      ? 'Học bù'
+                                      : session.sessionType === 'rescheduled'
+                                      ? 'Đổi lịch'
+                                      : 'Phát sinh'}
+                                  </span>
+                                )}
+                              </div>
+                              {a.note && <p className="text-[11px] text-slate-500 mt-0.5">{a.note}</p>}
+                            </div>
+                          </div>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full font-semibold text-[11px] shrink-0 ml-2 ${
+                              a.status === 'present'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : a.status === 'excused'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {a.status === 'present'
+                              ? 'Có mặt'
+                              : a.status === 'excused'
+                              ? 'Nghỉ có phép'
+                              : 'Vắng không phép'}
+                          </span>
+                        </div>
+                      );
+                    })
+                )}
               </div>
             </div>
           )}

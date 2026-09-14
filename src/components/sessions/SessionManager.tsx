@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { LessonSession, SessionType, SessionStatus } from '../../types';
-import { formatDayOfWeek } from '../../utils/vietqr';
+import { formatDayOfWeek, formatDateVN } from '../../utils/vietqr';
 import {
   Clock,
   Calendar,
@@ -14,6 +14,9 @@ import {
   DollarSign,
   Filter,
   RotateCcw,
+  Edit2,
+  Trash2,
+  X,
 } from 'lucide-react';
 
 export interface SessionFilterParams {
@@ -31,6 +34,9 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
   const {
     lessonSessions,
     addLessonSession,
+    updateLessonSession,
+    deleteLessonSession,
+    syncSessionsWithSchedules,
     cancelLessonSession,
     rescheduleLessonSession,
     toggleFeeEligibility,
@@ -78,6 +84,67 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
   const [extraTimeEnd, setExtraTimeEnd] = useState('16:00');
   const [extraReason, setExtraReason] = useState('Buổi tăng cường giải đề chuyên sâu');
   const [extraFeeEligible, setExtraFeeEligible] = useState(true);
+
+  // Edit Session Modal state
+  const [editingSession, setEditingSession] = useState<LessonSession | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editSessionType, setEditSessionType] = useState<SessionType>('regular');
+  const [editStatus, setEditStatus] = useState<SessionStatus>('scheduled');
+  const [editFeeEligible, setEditFeeEligible] = useState(true);
+
+  const openEditSessionModal = (s: LessonSession) => {
+    setEditingSession(s);
+    setEditDate(s.date);
+    setEditStartTime(s.startTime);
+    setEditEndTime(s.endTime);
+    setEditSessionType(s.sessionType);
+    setEditStatus(s.status);
+    setEditFeeEligible(s.feeEligible);
+  };
+
+  const handleEditSessionSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSession) return;
+    const dayOfWeek = new Date(editDate).getDay() as any;
+    updateLessonSession(editingSession.id, {
+      date: editDate,
+      dayOfWeek,
+      startTime: editStartTime,
+      endTime: editEndTime,
+      sessionType: editSessionType,
+      status: editStatus,
+      feeEligible: editFeeEligible,
+    });
+    setEditingSession(null);
+    showToast(
+      'Cập nhật buổi học thành công',
+      `Đã cập nhật giờ học (${editStartTime} - ${editEndTime}) và thông tin buổi ngày ${editDate}.`
+    );
+  };
+
+  // Delete Session Modal state
+  const [sessionToDelete, setSessionToDelete] = useState<LessonSession | null>(null);
+
+  const handleDeleteSessionConfirmed = () => {
+    if (!sessionToDelete) return;
+    const target = sessionToDelete;
+    deleteLessonSession?.(target.id);
+    setSessionToDelete(null);
+    showToast(
+      'Đã xóa buổi học thành công',
+      `Đã xóa buổi học ngày ${formatDateVN(target.date)} (${target.startTime} - ${target.endTime}) của lớp ${target.className}.`
+    );
+  };
+
+  const handleSyncSessions = () => {
+    const res = syncSessionsWithSchedules?.(selectedClassId !== 'ALL' ? selectedClassId : undefined);
+    showToast(
+      'Đồng bộ giờ thành công',
+      `Đã chuẩn hóa giờ học theo lịch cố định mới nhất cho ${res?.updatedCount ?? 0} buổi học.`
+    );
+  };
 
   const filteredSessions = lessonSessions.filter((s) => {
     const [sYear, sMonth] = s.date.split('-');
@@ -166,14 +233,26 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowExtraModal(true)}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Thêm buổi học phát sinh</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={handleSyncSessions}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors border border-slate-200 cursor-pointer"
+            title="Đồng bộ giờ học của các buổi học thực tế theo lịch cố định mới nhất"
+          >
+            <RotateCcw className="w-4 h-4 text-slate-500" />
+            <span>Đồng bộ giờ theo lịch cố định</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowExtraModal(true)}
+            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Thêm buổi học phát sinh</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -357,12 +436,21 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
                     </td>
 
                     <td className="py-3.5 px-4 text-right space-x-1">
+                      <button
+                        type="button"
+                        onClick={() => openEditSessionModal(s)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                        title="Chỉnh sửa giờ / ngày / thông tin buổi học"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+
                       {s.status !== 'cancelled' ? (
                         <>
                           <button
                             type="button"
                             onClick={() => setRescheduleModalSession(s)}
-                            className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg hover:bg-purple-50"
+                            className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
                             title="Đổi lịch buổi học"
                           >
                             <ArrowRightLeft className="w-3.5 h-3.5" />
@@ -374,15 +462,24 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
                               setCancelModalSession(s);
                               setMakeupDate(s.date);
                             }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
                             title="Hủy buổi học"
                           >
                             <XCircle className="w-3.5 h-3.5" />
                           </button>
                         </>
                       ) : (
-                        <span className="text-[11px] text-red-600 italic">Đã hủy</span>
+                        <span className="text-[11px] text-red-600 italic mr-1">Đã hủy</span>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => setSessionToDelete(s)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Xóa vĩnh viễn buổi học này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -643,6 +740,219 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialFilter })
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Session Modal */}
+      {editingSession && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                Chỉnh sửa buổi học ({editingSession.className})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingSession(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSessionSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Ngày học:</label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl p-2.5 outline-hidden font-medium"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Giờ bắt đầu:</label>
+                  <input
+                    type="time"
+                    value={editStartTime}
+                    onChange={(e) => setEditStartTime(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 outline-hidden font-medium"
+                    required
+                  />
+                  {editStartTime && (
+                    <span className="text-[10px] text-slate-500 mt-1 block font-semibold">
+                      {parseInt(editStartTime.split(':')[0]) < 12 ? '☀️ Sáng (SA)' : '🌙 Tối/Chiều (CH)'}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Giờ kết thúc:</label>
+                  <input
+                    type="time"
+                    value={editEndTime}
+                    onChange={(e) => setEditEndTime(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 outline-hidden font-medium"
+                    required
+                  />
+                  {editEndTime && (
+                    <span className="text-[10px] text-slate-500 mt-1 block font-semibold">
+                      {parseInt(editEndTime.split(':')[0]) < 12 ? '☀️ Sáng (SA)' : '🌙 Tối/Chiều (CH)'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-[10px] text-blue-600 bg-blue-50 p-2 rounded-xl border border-blue-100 leading-relaxed">
+                💡 Lưu ý: Giờ sáng (SA) từ 00:00 - 11:59 (ví dụ: 08:30). Giờ tối (CH) từ 12:00 - 23:59 (ví dụ: 20:30 là 8h30 tối).
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Loại buổi học:</label>
+                  <select
+                    value={editSessionType}
+                    onChange={(e) => setEditSessionType(e.target.value as SessionType)}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-white outline-hidden font-medium"
+                  >
+                    <option value="regular">Lịch cố định</option>
+                    <option value="make_up">Học bù</option>
+                    <option value="rescheduled">Đổi lịch</option>
+                    <option value="extra">Phát sinh</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Trạng thái:</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as SessionStatus)}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-white outline-hidden font-medium"
+                  >
+                    <option value="scheduled">Dự kiến</option>
+                    <option value="completed">Đã diễn ra</option>
+                    <option value="cancelled">Đã hủy</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="flex items-center space-x-2 cursor-pointer font-bold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={editFeeEligible}
+                    onChange={(e) => setEditFeeEligible(e.target.checked)}
+                    className="rounded text-blue-600"
+                  />
+                  <span>Tính học phí cho buổi học này</span>
+                </label>
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ses = editingSession;
+                    setEditingSession(null);
+                    setSessionToDelete(ses);
+                  }}
+                  className="px-3 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa buổi học này</span>
+                </button>
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSession(null)}
+                    className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md transition-colors cursor-pointer"
+                  >
+                    Lưu thay đổi
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {sessionToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center space-x-3">
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Xác nhận xóa buổi học</h3>
+                <p className="text-xs text-slate-500">Hành động này sẽ xóa vĩnh viễn buổi học</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Lớp học:</span>
+                <span className="font-bold text-slate-900">{sessionToDelete.className}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Thời gian:</span>
+                <span className="font-bold text-blue-700">
+                  {formatDayOfWeek(sessionToDelete.dayOfWeek)}, ngày {formatDateVN(sessionToDelete.date)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Khung giờ:</span>
+                <span className="font-bold font-mono text-slate-800">
+                  {sessionToDelete.startTime} - {sessionToDelete.endTime}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Phân loại:</span>
+                <span className="font-semibold text-slate-700">
+                  {sessionToDelete.sessionType === 'regular'
+                    ? 'Lịch cố định'
+                    : sessionToDelete.sessionType === 'make_up'
+                    ? 'Học bù'
+                    : sessionToDelete.sessionType === 'rescheduled'
+                    ? 'Đổi lịch'
+                    : 'Phát sinh'}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-start space-x-2.5 text-xs text-rose-800">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">
+                Buổi học sẽ bị xóa khỏi danh sách và đồng thời xóa các dữ liệu điểm danh liên quan của buổi này.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSessionToDelete(null)}
+                className="px-4 py-2.5 text-slate-600 hover:text-slate-800 font-medium text-xs rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSessionConfirmed}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors cursor-pointer flex items-center space-x-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xác nhận xóa vĩnh viễn</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

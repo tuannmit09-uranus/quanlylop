@@ -46,7 +46,12 @@ export const AttendanceManager: React.FC = () => {
 
   const currentClass = classes.find((c) => c.id === selectedClassId);
   const currentSession = lessonSessions.find((s) => s.id === selectedSessionId);
-  const classStudents = students.filter((s) => currentClass?.studentIds.includes(s.id));
+  const classStudents = students.filter((s) => {
+    if (Array.isArray(s.enrolledClassIds) && s.enrolledClassIds.length > 0) {
+      return s.enrolledClassIds.includes(selectedClassId);
+    }
+    return currentClass?.studentIds.includes(s.id);
+  });
 
   // Current session attendance records
   const sessionAttendance = attendance.filter((a) => a.sessionId === selectedSessionId);
@@ -307,6 +312,7 @@ export const AttendanceManager: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
+                  <th className="py-3 px-3 text-center w-12">STT</th>
                   <th className="py-3 px-4">Học sinh</th>
                   <th className="py-3 px-4">Trường / Khóa</th>
                   <th className="py-3 px-4">Phụ huynh</th>
@@ -315,12 +321,15 @@ export const AttendanceManager: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {classStudents.map((student) => {
+                {classStudents.map((student, idx) => {
                   const record = sessionAttendance.find((a) => a.studentId === student.id);
                   const status = record?.status; // undefined if not marked!
 
                   return (
                     <tr key={student.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-3 text-center font-bold text-slate-400">
+                        {idx + 1}
+                      </td>
                       <td className="py-3.5 px-4">
                         <span className="font-bold text-slate-900 block">{student.fullName}</span>
                         <span className="text-[11px] text-slate-400">SĐT: {student.phone}</span>

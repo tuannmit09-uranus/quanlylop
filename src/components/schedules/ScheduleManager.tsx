@@ -20,6 +20,7 @@ import {
   BookOpen,
   CalendarDays,
   ShieldCheck,
+  RotateCcw,
 } from 'lucide-react';
 
 interface GenerationResultData {
@@ -29,13 +30,19 @@ interface GenerationResultData {
   targetClassName?: string;
   targetClassSubject?: string;
   newSessionsCount: number;
+  deletedSessionsCount: number;
+  updatedSessionsCount: number;
   createdSessions: LessonSession[];
+  deletedSessions: LessonSession[];
+  updatedSessions: LessonSession[];
   totalMonthSessions: number;
   classSummaries: {
     classId: string;
     className: string;
     subjectName: string;
     newCount: number;
+    deletedCount: number;
+    updatedCount: number;
     totalMonthCount: number;
     scheduleDays: string;
   }[];
@@ -61,10 +68,12 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
     classes,
     generateSessionsForMonth,
     lessonSessions,
+    syncSessionsWithSchedules,
   } = useApp();
 
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [syncToast, setSyncToast] = useState<{ show: boolean; message: string } | null>(null);
 
   const [classId, setClassId] = useState(classes[0]?.id || '');
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>(2);
@@ -77,6 +86,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
 
   // Result Pop-up Modal state
   const [generationResult, setGenerationResult] = useState<GenerationResultData | null>(null);
+
+  // Delete Schedule Modal state
+  const [scheduleToDelete, setScheduleToDelete] = useState<{ sched: RecurringSchedule; className: string } | null>(null);
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -125,15 +137,22 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
     const cls = classes.find((c) => c.id === targetClassId);
     if (!cls) return;
 
-    // Generate sessions and receive newly created items
-    const newSessions = generateSessionsForMonth(targetClassId, genMonth, genYear);
+    // Generate sessions and receive newly created items, deleted items, updated items
+    const { created: newSessions, deleted: deletedSessions, updated: updatedSessions } =
+      generateSessionsForMonth(targetClassId, genMonth, genYear);
 
     // Get all sessions in that month for this class
     const monthStr = String(genMonth).padStart(2, '0');
-    const existingAndNewForClass = lessonSessions
+    const deletedIds = new Set(deletedSessions.map((d) => d.id));
+    const remainingAndNew = lessonSessions
       .filter((s) => {
         const [sYear, sMonth] = s.date.split('-');
-        return s.classId === targetClassId && sYear === String(genYear) && sMonth === monthStr;
+        return (
+          s.classId === targetClassId &&
+          sYear === String(genYear) &&
+          sMonth === monthStr &&
+          !deletedIds.has(s.id)
+        );
       })
       .concat(newSessions.filter((ns) => !lessonSessions.some((ls) => ls.id === ns.id)));
 
@@ -153,15 +172,21 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
       targetClassName: cls.name,
       targetClassSubject: cls.subjectName,
       newSessionsCount: newSessions.length,
+      deletedSessionsCount: deletedSessions.length,
+      updatedSessionsCount: updatedSessions.length,
       createdSessions: newSessions,
-      totalMonthSessions: existingAndNewForClass.length,
+      deletedSessions: deletedSessions,
+      updatedSessions: updatedSessions,
+      totalMonthSessions: remainingAndNew.length,
       classSummaries: [
         {
           classId: cls.id,
           className: cls.name,
           subjectName: cls.subjectName,
           newCount: newSessions.length,
-          totalMonthCount: existingAndNewForClass.length,
+          deletedCount: deletedSessions.length,
+          updatedCount: updatedSessions.length,
+          totalMonthCount: remainingAndNew.length,
           scheduleDays: schedDays,
         },
       ],
@@ -170,20 +195,29 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
 
   // Generate sessions for all classes
   const handleGenerateAll = () => {
-    let allNewSessions: LessonSession[] = [];
+    const { created: allNewSessions, deleted: allDeletedSessions, updated: allUpdatedSessions } =
+      generateSessionsForMonth('ALL', genMonth, genYear);
+
     const summaries: GenerationResultData['classSummaries'] = [];
     const monthStr = String(genMonth).padStart(2, '0');
+    const deletedIds = new Set(allDeletedSessions.map((d) => d.id));
 
     classes.forEach((c) => {
-      const created = generateSessionsForMonth(c.id, genMonth, genYear);
-      allNewSessions = allNewSessions.concat(created);
+      const classCreated = allNewSessions.filter((s) => s.classId === c.id);
+      const classDeleted = allDeletedSessions.filter((s) => s.classId === c.id);
+      const classUpdated = allUpdatedSessions.filter((s) => s.classId === c.id);
 
       const totalForClass = lessonSessions
         .filter((s) => {
           const [sYear, sMonth] = s.date.split('-');
-          return s.classId === c.id && sYear === String(genYear) && sMonth === monthStr;
+          return (
+            s.classId === c.id &&
+            sYear === String(genYear) &&
+            sMonth === monthStr &&
+            !deletedIds.has(s.id)
+          );
         })
-        .concat(created.filter((ns) => !lessonSessions.some((ls) => ls.id === ns.id))).length;
+        .concat(classCreated.filter((ns) => !lessonSessions.some((ls) => ls.id === ns.id))).length;
 
       const classScheds = recurringSchedules.filter(
         (s) => s.classId === c.id && s.status === 'active'
@@ -197,7 +231,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
         classId: c.id,
         className: c.name,
         subjectName: c.subjectName,
-        newCount: created.length,
+        newCount: classCreated.length,
+        deletedCount: classDeleted.length,
+        updatedCount: classUpdated.length,
         totalMonthCount: totalForClass,
         scheduleDays: schedDays,
       });
@@ -206,7 +242,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
     const totalMonthSessionsAll = lessonSessions
       .filter((s) => {
         const [sYear, sMonth] = s.date.split('-');
-        return sYear === String(genYear) && sMonth === monthStr;
+        return sYear === String(genYear) && sMonth === monthStr && !deletedIds.has(s.id);
       })
       .concat(allNewSessions.filter((ns) => !lessonSessions.some((ls) => ls.id === ns.id))).length;
 
@@ -215,7 +251,11 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
       year: genYear,
       isAllClasses: true,
       newSessionsCount: allNewSessions.length,
+      deletedSessionsCount: allDeletedSessions.length,
+      updatedSessionsCount: allUpdatedSessions.length,
       createdSessions: allNewSessions,
+      deletedSessions: allDeletedSessions,
+      updatedSessions: allUpdatedSessions,
       totalMonthSessions: totalMonthSessionsAll,
       classSummaries: summaries,
     });
@@ -245,6 +285,23 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
           <span>Thêm lịch cố định mới</span>
         </button>
       </div>
+
+      {/* Sync Toast Notification */}
+      {syncToast && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl p-4 text-xs flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center space-x-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-medium">{syncToast.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSyncToast(null)}
+            className="p-1 text-emerald-700 hover:text-emerald-900 rounded-lg cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Auto-generate Sessions Banner */}
       <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 border border-blue-200/90 rounded-3xl p-5 sm:p-6 shadow-2xs flex flex-col lg:flex-row items-center justify-between gap-4">
@@ -293,6 +350,23 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
                 </option>
               ))}
           </select>
+
+          <button
+            type="button"
+            onClick={() => {
+              const res = syncSessionsWithSchedules?.();
+              setSyncToast({
+                show: true,
+                message: `Đã đồng bộ giờ học cho toàn bộ các lớp. Tổng số ${res?.updatedCount || 0} buổi học thực tế được chuẩn hóa lại giờ theo lịch cố định mới nhất.`,
+              });
+              setTimeout(() => setSyncToast(null), 5000);
+            }}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all flex items-center space-x-1.5 border border-slate-200 cursor-pointer"
+            title="Đồng bộ lại giờ học cho tất cả buổi học thực tế của các lớp theo lịch cố định"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+            <span>Đồng bộ giờ tất cả lớp</span>
+          </button>
 
           <button
             type="button"
@@ -365,11 +439,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (confirm(`Bạn có chắc muốn xóa lịch ${formatDayOfWeek(sched.dayOfWeek)} của lớp ${cls.name}?`)) {
-                              deleteRecurringSchedule(sched.id);
-                            }
-                          }}
+                          onClick={() => setScheduleToDelete({ sched, className: cls.name })}
                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
                           title="Xóa lịch"
                         >
@@ -392,20 +462,95 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
                   {classSchedules.length} buổi / tuần
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => handleGenerate(cls.id)}
-                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-bold transition-all flex items-center space-x-1.5 border border-blue-200 cursor-pointer active:scale-98"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Sinh buổi tháng {genMonth}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const res = syncSessionsWithSchedules?.(cls.id);
+                      setSyncToast({
+                        show: true,
+                        message: `Đã đồng bộ giờ học cho lớp ${cls.name}. Đã cập nhật ${res?.updatedCount || 0} buổi học thực tế theo lịch cố định mới nhất.`,
+                      });
+                      setTimeout(() => setSyncToast(null), 5000);
+                    }}
+                    title="Đồng bộ giờ các buổi học thực tế của lớp theo lịch cố định"
+                    className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleGenerate(cls.id)}
+                    className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-bold transition-all flex items-center space-x-1.5 border border-blue-200 cursor-pointer active:scale-98"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Sinh buổi tháng {genMonth}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Delete Confirmation Modal for Schedule */}
+      {scheduleToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center space-x-3">
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Xác nhận xóa lịch học</h3>
+                <p className="text-xs text-slate-500">Xóa lịch học cố định hàng tuần</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Lớp học:</span>
+                <span className="font-bold text-slate-900">{scheduleToDelete.className}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Thứ trong tuần:</span>
+                <span className="font-bold text-blue-700">
+                  {formatDayOfWeek(scheduleToDelete.sched.dayOfWeek)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Khung giờ:</span>
+                <span className="font-bold font-mono text-slate-800">
+                  {scheduleToDelete.sched.startTime} - {scheduleToDelete.sched.endTime}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setScheduleToDelete(null)}
+                className="px-4 py-2.5 text-slate-600 hover:text-slate-800 font-medium text-xs rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteRecurringSchedule(scheduleToDelete.sched.id);
+                  setScheduleToDelete(null);
+                }}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors cursor-pointer flex items-center space-x-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xác nhận xóa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* POP-UP MODAL: Generation Result (Pop-up thông báo tự động sinh buổi học) */}
       {generationResult && (
@@ -441,15 +586,18 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
             {/* Scrollable Modal Content */}
             <div className="space-y-4 overflow-y-auto pr-1 text-xs flex-1">
               {/* Notification Banner */}
-              {generationResult.newSessionsCount > 0 ? (
+              {generationResult.newSessionsCount > 0 || generationResult.deletedSessionsCount > 0 || generationResult.updatedSessionsCount > 0 ? (
                 <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start space-x-3">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <p className="font-bold text-emerald-900 text-xs sm:text-sm">
-                      Đã tự động sinh thành công {generationResult.newSessionsCount} buổi học dự kiến Tháng {generationResult.month}/{generationResult.year}!
+                      Đã đồng bộ lịch và sinh buổi học thành công Tháng {generationResult.month}/{generationResult.year}!
                     </p>
                     <p className="text-emerald-700 text-xs leading-relaxed">
-                      Các buổi học được tạo tự động theo đúng khung giờ và thứ trong tuần của lịch cố định. Trạng thái: <strong>Dự kiến (Scheduled)</strong> và được gắn cờ <strong>Có tính học phí (fee_eligible)</strong> theo quy tắc BR-003.
+                      Chỉ giữ lại các buổi học đang có trong danh sách lịch cố định.
+                      {generationResult.newSessionsCount > 0 && ` • Tạo mới: +${generationResult.newSessionsCount} buổi.`}
+                      {generationResult.deletedSessionsCount > 0 && ` • Đã xóa: -${generationResult.deletedSessionsCount} buổi học cũ không còn trong danh sách.`}
+                      {generationResult.updatedSessionsCount > 0 && ` • Chuẩn hóa giờ: ${generationResult.updatedSessionsCount} buổi.`}
                     </p>
                   </div>
                 </div>
@@ -458,35 +606,42 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
                   <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <p className="font-bold text-blue-900 text-xs sm:text-sm">
-                      Các buổi học Tháng {generationResult.month}/{generationResult.year} đã tồn tại đầy đủ!
+                      Các buổi học Tháng {generationResult.month}/{generationResult.year} đã hoàn toàn khớp đúng với danh sách lịch cố định!
                     </p>
                     <p className="text-blue-700 text-xs leading-relaxed">
-                      Hệ thống đã nhận diện các buổi học của tháng này đã được tạo từ trước. Cơ chế chống trùng lặp tự động giữ nguyên dữ liệu điểm danh và tiến độ hiện tại.
+                      Không có buổi học thừa nào cần xóa, các khung giờ học đã khớp 100% với cấu hình lịch tuần hiện tại.
                     </p>
                   </div>
                 </div>
               )}
 
               {/* Quick KPI Stats Grid */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-center">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
                   <span className="text-[11px] font-semibold text-slate-500 block">Buổi tạo mới</span>
-                  <span className="text-xl font-black text-emerald-600 mt-1 block">
+                  <span className="text-lg font-black text-emerald-600 mt-1 block">
                     +{generationResult.newSessionsCount}
                   </span>
                 </div>
 
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-center">
-                  <span className="text-[11px] font-semibold text-slate-500 block">Tổng buổi trong tháng</span>
-                  <span className="text-xl font-black text-blue-600 mt-1 block">
-                    {generationResult.totalMonthSessions}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
+                  <span className="text-[11px] font-semibold text-slate-500 block">Đã xóa thừa</span>
+                  <span className={`text-lg font-black mt-1 block ${generationResult.deletedSessionsCount > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                    -{generationResult.deletedSessionsCount}
                   </span>
                 </div>
 
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-center">
-                  <span className="text-[11px] font-semibold text-slate-500 block">Số lớp áp dụng</span>
-                  <span className="text-xl font-black text-indigo-600 mt-1 block">
-                    {generationResult.classSummaries.length}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
+                  <span className="text-[11px] font-semibold text-slate-500 block">Chuẩn hóa giờ</span>
+                  <span className={`text-lg font-black mt-1 block ${generationResult.updatedSessionsCount > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                    {generationResult.updatedSessionsCount}
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
+                  <span className="text-[11px] font-semibold text-slate-500 block">Tổng buổi tháng</span>
+                  <span className="text-lg font-black text-blue-600 mt-1 block">
+                    {generationResult.totalMonthSessions}
                   </span>
                 </div>
               </div>
@@ -520,13 +675,21 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
                         <div>
                           <span className="text-[11px] text-slate-400 block">Tạo mới</span>
                           <span className="font-bold text-emerald-600 font-mono text-xs">
-                            +{summary.newCount} buổi
+                            +{summary.newCount}
                           </span>
                         </div>
+                        {summary.deletedCount > 0 && (
+                          <div className="pl-3 border-l border-slate-200">
+                            <span className="text-[11px] text-slate-400 block">Đã xóa</span>
+                            <span className="font-bold text-rose-600 font-mono text-xs">
+                              -{summary.deletedCount}
+                            </span>
+                          </div>
+                        )}
                         <div className="pl-3 border-l border-slate-200">
-                          <span className="text-[11px] text-slate-400 block">Tổng số buổi</span>
+                          <span className="text-[11px] text-slate-400 block">Tổng buổi</span>
                           <span className="font-bold text-blue-700 font-mono text-xs">
-                            {summary.totalMonthCount} buổi
+                            {summary.totalMonthCount}
                           </span>
                         </div>
                       </div>
@@ -534,6 +697,46 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
                   ))}
                 </div>
               </div>
+
+              {/* Preview deleted sessions if any */}
+              {generationResult.deletedSessions && generationResult.deletedSessions.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <h4 className="font-bold text-rose-700 text-xs flex items-center space-x-1.5">
+                    <Trash2 className="w-4 h-4 text-rose-600" />
+                    <span>Danh sách {generationResult.deletedSessions.length} buổi học đã được xóa (do không có trong lịch):</span>
+                  </h4>
+
+                  <div className="max-h-40 overflow-y-auto rounded-2xl border border-rose-200 divide-y divide-rose-100 bg-rose-50/30">
+                    {generationResult.deletedSessions.map((session) => (
+                      <div
+                        key={session.id}
+                        className="p-2.5 hover:bg-rose-50/70 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <span className="font-bold text-rose-800 w-16">
+                            {formatDayOfWeek(session.dayOfWeek)}
+                          </span>
+                          <span className="font-mono text-slate-700">
+                            {formatDateVN(session.date)}
+                          </span>
+                          <span className="text-slate-400 font-mono text-[11px]">
+                            ({session.startTime} - {session.endTime})
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <span className="text-slate-600 font-medium text-[11px]">
+                            {session.className}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
+                            Đã xóa
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Preview newly created sessions if any */}
               {generationResult.createdSessions.length > 0 && (
@@ -670,6 +873,11 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
                     className="w-full border border-slate-300 rounded-xl p-2.5 outline-hidden"
                     required
                   />
+                  {startTime && (
+                    <span className="text-[10px] text-slate-500 mt-1 block font-semibold">
+                      {parseInt(startTime.split(':')[0]) < 12 ? '☀️ Buổi sáng (SA / AM)' : '🌙 Buổi chiều / tối (CH / PM)'}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Giờ kết thúc:</label>
@@ -680,8 +888,16 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onNavigate }) 
                     className="w-full border border-slate-300 rounded-xl p-2.5 outline-hidden"
                     required
                   />
+                  {endTime && (
+                    <span className="text-[10px] text-slate-500 mt-1 block font-semibold">
+                      {parseInt(endTime.split(':')[0]) < 12 ? '☀️ Buổi sáng (SA / AM)' : '🌙 Buổi chiều / tối (CH / PM)'}
+                    </span>
+                  )}
                 </div>
               </div>
+              <p className="text-[11px] text-blue-600 bg-blue-50 p-2 rounded-xl border border-blue-100">
+                💡 Lưu ý: Giờ sáng (SA) từ 00:00 - 11:59 (ví dụ: 08:30). Giờ chiều/tối (CH) từ 12:00 - 23:59 (ví dụ: 20:30 là 8h30 tối).
+              </p>
 
               <div className="flex justify-end space-x-2 pt-2">
                 <button

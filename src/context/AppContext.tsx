@@ -13,8 +13,10 @@ import {
   InvitationStatus,
   InvitationType,
   ParentRelationship,
+  DayOfWeek,
   RecurringSchedule,
   LessonSession,
+  GenerateSessionsResult,
   Lesson,
   AttendanceRecord,
   StudentEvaluation,
@@ -153,11 +155,17 @@ interface AppContextType {
   addRecurringSchedule: (schedule: Omit<RecurringSchedule, 'id' | 'tenant_id'>) => void;
   updateRecurringSchedule: (id: string, schedule: Partial<RecurringSchedule>) => void;
   deleteRecurringSchedule: (id: string) => void;
-  generateSessionsForMonth: (classId: string, month: number, year: number) => LessonSession[];
+  generateSessionsForMonth: (
+    classId: string,
+    month: number,
+    year: number
+  ) => GenerateSessionsResult;
 
   lessonSessions: LessonSession[];
   addLessonSession: (session: Omit<LessonSession, 'id' | 'tenant_id' | 'created_at'>) => void;
   updateLessonSession: (id: string, session: Partial<LessonSession>) => void;
+  deleteLessonSession?: (id: string) => void;
+  syncSessionsWithSchedules?: (classId?: string) => { updatedCount: number };
   cancelLessonSession: (id: string, reason: string, createMakeup?: boolean, makeupDate?: string) => void;
   rescheduleLessonSession: (id: string, newDate: string, reason: string) => void;
   toggleFeeEligibility: (id: string) => void;
@@ -557,6 +565,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // Auto-heal bidirectional consistency between student.enrolledClassIds and class.studentIds
+  useEffect(() => {
+    if (classes.length === 0 || students.length === 0) return;
+
+    let classNeedsUpdate = false;
+    const healedClasses = classes.map((cls) => {
+      // Valid students are those that exist AND (if they have enrolledClassIds, must include this class)
+      const validStudentIds = cls.studentIds.filter((sId) => {
+        const student = students.find((s) => s.id === sId);
+        if (!student) return false;
+        if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0) {
+          return student.enrolledClassIds.includes(cls.id);
+        }
+        return true;
+      });
+
+      // Also ensure any student who has this class in enrolledClassIds is included
+      students.forEach((student) => {
+        if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.includes(cls.id)) {
+          if (!validStudentIds.includes(student.id)) {
+            validStudentIds.push(student.id);
+          }
+        }
+      });
+
+      const isChanged =
+        validStudentIds.length !== cls.studentIds.length ||
+        validStudentIds.some((id) => !cls.studentIds.includes(id));
+
+      if (isChanged) {
+        classNeedsUpdate = true;
+        const updated = { ...cls, studentIds: validStudentIds };
+        syncSaveToFirestore('classes', cls.id, updated);
+        return updated;
+      }
+      return cls;
+    });
+
+    if (classNeedsUpdate) {
+      setClasses(healedClasses);
+    }
+  }, [classes, students]);
+
+  // Auto-heal: synchronize regular lessonSessions start/end time with active recurringSchedules
+  useEffect(() => {
+    if (recurringSchedules.length === 0 || lessonSessions.length === 0) return;
+
+    let sessionsNeedUpdate = false;
+    const healedSessions = lessonSessions.map((ses) => {
+      // Only auto-heal regular sessions that belong to an active class
+      if (ses.sessionType !== 'regular') return ses;
+
+      // Determine day of week
+      let dayOfWeek = ses.dayOfWeek;
+      if (dayOfWeek === undefined || dayOfWeek === null) {
+        const d = new Date(ses.date);
+        dayOfWeek = d.getDay() as any;
+      }
+
+      const activeSched = recurringSchedules.find(
+        (s) => s.classId === ses.classId && s.status === 'active' && s.dayOfWeek === dayOfWeek
+      );
+
+      if (activeSched) {
+        if (ses.startTime !== activeSched.startTime || ses.endTime !== activeSched.endTime) {
+          sessionsNeedUpdate = true;
+          const updated = {
+            ...ses,
+            startTime: activeSched.startTime,
+            endTime: activeSched.endTime,
+          };
+          syncSaveToFirestore('sessions', ses.id, updated);
+          return updated;
+        }
+      }
+
+      return ses;
+    });
+
+    if (sessionsNeedUpdate) {
+      setLessonSessions(healedSessions);
+    }
+  }, [recurringSchedules, lessonSessions]);
+
   // Automatically calculate tuition reactively when attendance, sessions, classes or students change
   useEffect(() => {
     // Find all distinct month-year periods from lessonSessions
@@ -584,6 +676,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           cls.studentIds.forEach((studentId) => {
             const student = students.find((s) => s.id === studentId);
             if (!student) return;
+            if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0 && !student.enrolledClassIds.includes(cls.id)) {
+              return;
+            }
 
             // Find sessions of this class in this month/year with feeEligible === true where student is 'present'
             const studentPresentSessions = lessonSessions.filter((s) => {
@@ -1093,6 +1188,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
+    // Keep class.studentIds in bidirectional sync with student.enrolledClassIds
+    if (data.enrolledClassIds !== undefined) {
+      const newClassIds = data.enrolledClassIds || [];
+      setClasses((prevClasses) => {
+        return prevClasses.map((cls) => {
+          const shouldHaveStudent = newClassIds.includes(cls.id);
+          const alreadyHasStudent = cls.studentIds.includes(id);
+
+          if (shouldHaveStudent && !alreadyHasStudent) {
+            const updatedCls = { ...cls, studentIds: [...cls.studentIds, id] };
+            syncSaveToFirestore('classes', cls.id, updatedCls);
+            return updatedCls;
+          } else if (!shouldHaveStudent && alreadyHasStudent) {
+            const updatedCls = { ...cls, studentIds: cls.studentIds.filter((sId) => sId !== id) };
+            syncSaveToFirestore('classes', cls.id, updatedCls);
+            return updatedCls;
+          }
+          return cls;
+        });
+      });
+    }
+
     // If parent contact info was modified, keep linked primary parent record in sync
     if (data.parentName || data.parentPhone || data.parentEmail) {
       const primaryLink =
@@ -1128,6 +1245,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteStudent = (id: string) => {
     setStudents((prev) => prev.filter((s) => s.id !== id));
     syncDeleteFromFirestore('students', id);
+    // Also cleanup classes studentIds
+    setClasses((prev) =>
+      prev.map((cls) => {
+        if (cls.studentIds.includes(id)) {
+          const updatedCls = { ...cls, studentIds: cls.studentIds.filter((sId) => sId !== id) };
+          syncSaveToFirestore('classes', cls.id, updatedCls);
+          return updatedCls;
+        }
+        return cls;
+      })
+    );
     // Also cleanup parent_students link for this student
     setParentStudents((prev) => prev.filter((ps) => ps.student_id !== id));
     setAccountInvitations((prev) => prev.filter((inv) => inv.student_id !== id));
@@ -1973,12 +2101,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateRecurringSchedule = (id: string, data: Partial<RecurringSchedule>) => {
+    let targetClassId = '';
+    let targetDayOfWeek: DayOfWeek | undefined;
+    let newStartTime = '';
+    let newEndTime = '';
+
     setRecurringSchedules((prev) => {
       const updated = prev.map((s) => (s.id === id ? { ...s, ...data } : s));
       const target = updated.find((s) => s.id === id);
-      if (target) syncSaveToFirestore('schedules', id, target);
+      if (target) {
+        syncSaveToFirestore('schedules', id, target);
+        targetClassId = target.classId;
+        targetDayOfWeek = target.dayOfWeek;
+        newStartTime = target.startTime;
+        newEndTime = target.endTime;
+      }
       return updated;
     });
+
+    // Cascade time changes directly to regular scheduled sessions of this class and day of week
+    if (targetClassId && (data.startTime || data.endTime || data.dayOfWeek !== undefined)) {
+      setLessonSessions((prev) => {
+        return prev.map((ses) => {
+          if (
+            ses.classId === targetClassId &&
+            ses.sessionType === 'regular' &&
+            ses.dayOfWeek === targetDayOfWeek &&
+            (ses.startTime !== newStartTime || ses.endTime !== newEndTime)
+          ) {
+            const updatedSes = { ...ses, startTime: newStartTime, endTime: newEndTime };
+            syncSaveToFirestore('sessions', ses.id, updatedSes);
+            return updatedSes;
+          }
+          return ses;
+        });
+      });
+    }
+
     addAuditLog('update', 'recurring_schedule', id, `Cập nhật lịch cố định ID ${id}`);
   };
 
@@ -1988,62 +2147,182 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('delete', 'recurring_schedule', id, `Xóa lịch cố định ID ${id}`);
   };
 
-  // Auto-generate Sessions for Month
-  const generateSessionsForMonth = (classId: string, month: number, year: number): LessonSession[] => {
-    const cls = classes.find((c) => c.id === classId);
-    if (!cls) return [];
-
-    const classSchedules = recurringSchedules.filter(
-      (s) => s.classId === classId && s.status === 'active'
-    );
-    if (classSchedules.length === 0) return [];
-
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const newSessions: LessonSession[] = [];
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateObj = new Date(year, month - 1, day);
-      const dayOfWeek = dateObj.getDay(); // 0 is Sunday, 1 is Monday...
-
-      const matchedSched = classSchedules.find((s) => s.dayOfWeek === dayOfWeek);
-      if (matchedSched) {
-        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        // Check if session already exists
-        const exists = lessonSessions.some(
-          (s) => s.classId === classId && s.date === dateStr
-        );
-        if (!exists) {
-          const session: LessonSession = {
-            id: `ses-${classId}-${dateStr.replace(/-/g, '')}`,
-            tenant_id: currentTenant.id,
-            classId,
-            className: cls.name,
-            date: dateStr,
-            dayOfWeek: dayOfWeek as any,
-            startTime: matchedSched.startTime,
-            endTime: matchedSched.endTime,
-            sessionType: 'regular',
-            status: 'scheduled',
-            feeEligible: true,
-            created_at: new Date().toISOString().split('T')[0],
-          };
-          newSessions.push(session);
-        }
-      }
+  // Auto-generate Sessions for Month & Sync with schedule:
+  // Quy tắc: Chỉ sinh những buổi học đang có trong danh sách lịch cố định (active).
+  // Những buổi học đã sinh từ trước đó nếu không có trong danh sách lịch cố định hiện tại thì tự động cập nhật xóa đi.
+  const generateSessionsForMonth = (
+    classId: string,
+    month: number,
+    year: number
+  ): GenerateSessionsResult => {
+    const targetClasses = classId === 'ALL' ? classes : classes.filter((c) => c.id === classId);
+    if (targetClasses.length === 0) {
+      return { created: [], deleted: [], updated: [] };
     }
 
-    if (newSessions.length > 0) {
-      setLessonSessions((prev) => [...prev, ...newSessions]);
-      newSessions.forEach((ses) => syncSaveToFirestore('sessions', ses.id, ses));
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const monthStr = String(month).padStart(2, '0');
+    const monthPrefix = `${year}-${monthStr}-`;
+
+    const newSessions: LessonSession[] = [];
+    const updatedSessions: LessonSession[] = [];
+    const deletedSessions: LessonSession[] = [];
+
+    targetClasses.forEach((cls) => {
+      // 1. Get active recurring schedules for this class
+      const classScheds = recurringSchedules.filter(
+        (s) => s.classId === cls.id && s.status === 'active'
+      );
+
+      // 2. Expected sessions by date for this month
+      // Map: dateStr -> list of matching schedules for that day
+      const expectedMap = new Map<string, RecurringSchedule[]>();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateObj = new Date(year, month - 1, day);
+        const dayOfWeek = dateObj.getDay();
+        const matched = classScheds.filter((s) => s.dayOfWeek === dayOfWeek);
+        if (matched.length > 0) {
+          const dateStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`;
+          expectedMap.set(dateStr, matched);
+        }
+      }
+
+      // 3. Existing sessions for this class in this month
+      const existingForClassAndMonth = lessonSessions.filter(
+        (s) => s.classId === cls.id && s.date.startsWith(monthPrefix)
+      );
+
+      // 4. Identify sessions to DELETE:
+      // Những buổi học nếu không có trong danh sách mà đã được sinh từ trước đó (sessionType: 'regular')
+      // thì cập nhật xóa đi
+      existingForClassAndMonth.forEach((ses) => {
+        if (ses.sessionType === 'regular') {
+          // Nếu ngày học này không có trong danh sách lịch cố định -> Xóa đi
+          if (!expectedMap.has(ses.date)) {
+            deletedSessions.push(ses);
+          }
+        }
+      });
+
+      // 5. Đối với các ngày CÓ trong lịch cố định:
+      // Sinh mới nếu chưa có, hoặc cập nhật chuẩn hóa giờ nếu giờ khác với lịch cố định
+      expectedMap.forEach((matchedScheds, dateStr) => {
+        matchedScheds.forEach((sched) => {
+          const existing = existingForClassAndMonth.find(
+            (s) =>
+              s.date === dateStr &&
+              s.sessionType === 'regular' &&
+              !deletedSessions.some((d) => d.id === s.id)
+          );
+
+          if (!existing) {
+            const newSes: LessonSession = {
+              id: `ses-${cls.id}-${dateStr.replace(/-/g, '')}`,
+              tenant_id: currentTenant.id,
+              classId: cls.id,
+              className: cls.name,
+              date: dateStr,
+              dayOfWeek: sched.dayOfWeek,
+              startTime: sched.startTime,
+              endTime: sched.endTime,
+              sessionType: 'regular',
+              status: 'scheduled',
+              feeEligible: true,
+              created_at: new Date().toISOString().split('T')[0],
+            };
+            newSessions.push(newSes);
+          } else {
+            if (
+              existing.startTime !== sched.startTime ||
+              existing.endTime !== sched.endTime ||
+              existing.dayOfWeek !== sched.dayOfWeek
+            ) {
+              const updated = {
+                ...existing,
+                startTime: sched.startTime,
+                endTime: sched.endTime,
+                dayOfWeek: sched.dayOfWeek,
+              };
+              updatedSessions.push(updated);
+            }
+          }
+        });
+      });
+    });
+
+    const deletedIds = new Set(deletedSessions.map((s) => s.id));
+    const updatedMap = new Map(updatedSessions.map((s) => [s.id, s]));
+
+    if (newSessions.length > 0 || deletedSessions.length > 0 || updatedSessions.length > 0) {
+      setLessonSessions((prev) => {
+        // 1. Remove deleted
+        const remaining = prev.filter((s) => !deletedIds.has(s.id));
+        // 2. Update existing
+        const mapped = remaining.map((s) => updatedMap.get(s.id) || s);
+        // 3. Append new sessions
+        return [...mapped, ...newSessions];
+      });
+
+      // Clean up any attendance linked to deleted sessions
+      if (deletedSessions.length > 0) {
+        setAttendance((prev) => prev.filter((a) => !deletedIds.has(a.sessionId)));
+        deletedSessions.forEach((s) => {
+          syncDeleteFromFirestore('sessions', s.id);
+        });
+      }
+
+      // Sync updated & created to Firestore
+      updatedSessions.forEach((s) => {
+        syncSaveToFirestore('sessions', s.id, s);
+      });
+      newSessions.forEach((s) => {
+        syncSaveToFirestore('sessions', s.id, s);
+      });
+
       addAuditLog(
-        'create',
+        'update',
         'lesson_sessions_batch',
         classId,
-        `Tự động sinh ${newSessions.length} buổi học cho lớp ${cls.name} (Tháng ${month}/${year})`
+        `Sinh buổi học Tháng ${month}/${year}: Tạo mới ${newSessions.length} buổi, Xóa ${deletedSessions.length} buổi không còn trong lịch, Cập nhật giờ ${updatedSessions.length} buổi.`
       );
     }
 
-    return newSessions;
+    return {
+      created: newSessions,
+      deleted: deletedSessions,
+      updated: updatedSessions,
+    };
+  };
+
+  // Explicit sync of all sessions with active recurring schedules
+  const syncSessionsWithSchedules = (classId?: string): { updatedCount: number } => {
+    let count = 0;
+    setLessonSessions((prev) => {
+      const updated = prev.map((ses) => {
+        if (classId && ses.classId !== classId) return ses;
+        if (ses.sessionType !== 'regular') return ses;
+
+        let dayOfWeek = ses.dayOfWeek;
+        if (dayOfWeek === undefined || dayOfWeek === null) {
+          dayOfWeek = new Date(ses.date).getDay() as any;
+        }
+
+        const sched = recurringSchedules.find(
+          (s) => s.classId === ses.classId && s.status === 'active' && s.dayOfWeek === dayOfWeek
+        );
+        if (!sched) return ses;
+
+        if (ses.startTime !== sched.startTime || ses.endTime !== sched.endTime) {
+          count++;
+          const fixedSes = { ...ses, startTime: sched.startTime, endTime: sched.endTime };
+          syncSaveToFirestore('sessions', fixedSes.id, fixedSes);
+          return fixedSes;
+        }
+        return ses;
+      });
+      return updated;
+    });
+    return { updatedCount: count };
   };
 
   // Lesson Sessions CRUD
@@ -2067,6 +2346,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
     addAuditLog('update', 'lesson_session', id, `Cập nhật buổi học ID ${id}`);
+  };
+
+  const deleteLessonSession = (id: string) => {
+    setLessonSessions((prev) => prev.filter((s) => s.id !== id));
+    syncDeleteFromFirestore('sessions', id);
+    setAttendance((prev) => prev.filter((a) => a.sessionId !== id));
+    addAuditLog('delete', 'lesson_session', id, `Xóa buổi học ID ${id}`);
   };
 
   // BR-003, BR-005, BR-006: Cancel & Make-up logic
@@ -2291,7 +2577,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cls = classes.find((c) => c.id === classId);
     if (!cls) return;
 
-    const classStudents = students.filter((s) => cls.studentIds.includes(s.id));
+    const classStudents = students.filter((s) => {
+      if (Array.isArray(s.enrolledClassIds) && s.enrolledClassIds.length > 0) {
+        return s.enrolledClassIds.includes(classId);
+      }
+      return cls.studentIds.includes(s.id);
+    });
     const nowStr = new Date().toISOString().split('T')[0];
 
     setAttendance((prev) => {
@@ -2539,6 +2830,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cls.studentIds.forEach((studentId) => {
         const student = students.find((s) => s.id === studentId);
         if (!student) return;
+        if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0 && !student.enrolledClassIds.includes(cls.id)) {
+          return;
+        }
 
         // Find sessions of this class in this month/year with feeEligible === true where student is marked 'present'
         const studentPresentSessions = lessonSessions.filter((s) => {
@@ -3518,6 +3812,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         lessonSessions: tenantLessonSessions,
         addLessonSession,
         updateLessonSession,
+        deleteLessonSession,
+        syncSessionsWithSchedules,
         cancelLessonSession,
         rescheduleLessonSession,
         toggleFeeEligibility,

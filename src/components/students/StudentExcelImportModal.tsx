@@ -42,7 +42,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
   const [error, setError] = useState<string | null>(null);
 
   // Global defaults for this import
-  const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>('');
 
   // Quick text paste state

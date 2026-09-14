@@ -336,70 +336,73 @@ export const ClassManager: React.FC = () => {
       )}
 
       {/* Roster / Student Assignment Modal */}
-      {selectedClassForRoster && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-bold text-slate-900 text-base">
-                  Danh sách học sinh: {selectedClassForRoster.name}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Gán hoặc rút học sinh khỏi lớp học
-                </p>
+      {selectedClassForRoster && (() => {
+        const liveClass = classes.find((c) => c.id === selectedClassForRoster.id) || selectedClassForRoster;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    Danh sách học sinh: {liveClass.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Gán hoặc rút học sinh khỏi lớp học ({liveClass.studentIds.length} học sinh hiện tại)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClassForRoster(null)}
+                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedClassForRoster(null)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="mt-4 space-y-2 text-xs">
-              {students.map((student) => {
-                const isEnrolled = selectedClassForRoster.studentIds.includes(student.id);
-                return (
-                  <div
-                    key={student.id}
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
-                      isEnrolled
-                        ? 'bg-blue-50/70 border-blue-200'
-                        : 'bg-slate-50 border-slate-200/60'
-                    }`}
-                  >
-                    <div>
-                      <span className="font-bold text-slate-900 block">{student.fullName}</span>
-                      <span className="text-[11px] text-slate-500">
-                        {student.schoolName} ({student.schoolCode}) • Lớp {student.schoolGrade}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isEnrolled) {
-                          removeStudentFromClass(selectedClassForRoster.id, student.id);
-                        } else {
-                          assignStudentToClass(selectedClassForRoster.id, student.id);
-                        }
-                      }}
-                      className={`px-3 py-1.5 rounded-xl font-bold transition-colors ${
+              <div className="mt-4 space-y-2 text-xs">
+                {students.map((student) => {
+                  const isEnrolled = liveClass.studentIds.includes(student.id);
+                  return (
+                    <div
+                      key={student.id}
+                      className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
                         isEnrolled
-                          ? 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
-                          : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                          ? 'bg-blue-50/70 border-blue-200'
+                          : 'bg-slate-50 border-slate-200/60'
                       }`}
                     >
-                      {isEnrolled ? 'Rút khỏi lớp' : '+ Gán vào lớp'}
-                    </button>
-                  </div>
-                );
-              })}
+                      <div>
+                        <span className="font-bold text-slate-900 block">{student.fullName}</span>
+                        <span className="text-[11px] text-slate-500">
+                          {student.schoolName} ({student.schoolCode}) • Lớp {student.schoolGrade}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isEnrolled) {
+                            removeStudentFromClass(liveClass.id, student.id);
+                          } else {
+                            assignStudentToClass(liveClass.id, student.id);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold transition-colors cursor-pointer ${
+                          isEnrolled
+                            ? 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                        }`}
+                      >
+                        {isEnrolled ? 'Rút khỏi lớp' : '+ Gán vào lớp'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

@@ -297,7 +297,21 @@ export async function parseStudentExcelFile(
         const classNames = rawClass.split(/[,;/+]/).map((c) => c.trim().toLowerCase()).filter(Boolean);
         options.existingClasses.forEach((cls) => {
           const clsLower = cls.name.toLowerCase();
-          if (classNames.some((query) => clsLower.includes(query) || query.includes(clsLower))) {
+          const matched = classNames.some((query) => {
+            if (clsLower === query) return true;
+            // Extract distinct class identifier token like "k9pbc", "k9", "k11", "k10"
+            const queryGradeToken = query.match(/\b(k\d+[a-z0-9]*)\b/i)?.[1]?.toLowerCase();
+            const clsGradeToken = clsLower.match(/\b(k\d+[a-z0-9]*)\b/i)?.[1]?.toLowerCase();
+            if (queryGradeToken && clsGradeToken) {
+              return queryGradeToken === clsGradeToken;
+            }
+            // Only use substring matching if query has distinct length and is not just common generic words
+            const isGeneric = ['cô', 'thầy', 'lý', 'toán', 'hóa', 'văn', 'anh'].includes(query.trim());
+            if (isGeneric) return false;
+            return clsLower.includes(query);
+          });
+
+          if (matched) {
             if (!enrolledClassIds.includes(cls.id)) {
               enrolledClassIds.push(cls.id);
               enrolledClassNames.push(cls.name);
@@ -307,7 +321,7 @@ export async function parseStudentExcelFile(
       }
 
       // Also apply default selected class if user picked one and not yet in list
-      if (options.defaultClassId) {
+      if (options.defaultClassId && options.defaultClassId.trim() !== '') {
         const defCls = options.existingClasses.find((c) => c.id === options.defaultClassId);
         if (defCls && !enrolledClassIds.includes(defCls.id)) {
           enrolledClassIds.push(defCls.id);

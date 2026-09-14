@@ -183,6 +183,12 @@ export interface LessonSession {
   created_at: string;
 }
 
+export interface GenerateSessionsResult {
+  created: LessonSession[];
+  deleted: LessonSession[];
+  updated: LessonSession[];
+}
+
 export interface Lesson {
   id: string;
   tenant_id: string;

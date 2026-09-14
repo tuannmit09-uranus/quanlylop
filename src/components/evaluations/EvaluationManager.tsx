@@ -85,7 +85,12 @@ export const EvaluationManager: React.FC<EvaluationManagerProps> = ({
   const currentLesson = gradeLessons.find((l) => l.id === selectedLessonId) || gradeLessons[0];
 
   // Students in selected class
-  const classStudents = students.filter((s) => currentClass?.studentIds.includes(s.id));
+  const classStudents = students.filter((s) => {
+    if (Array.isArray(s.enrolledClassIds) && s.enrolledClassIds.length > 0) {
+      return s.enrolledClassIds.includes(selectedClassId);
+    }
+    return currentClass?.studentIds.includes(s.id);
+  });
 
   // State for form feedback and notifications
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);

@@ -119,11 +119,11 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = 'Họ tên,Mã trường,Khóa,Lớp,Số buổi,Đơn giá/buổi,Thành tiền,Mã VietQR,Trạng thái\n';
+    const headers = 'STT,Họ tên,Mã trường,Khóa,Lớp,Số buổi,Đơn giá/buổi,Thành tiền,Mã VietQR,Trạng thái\n';
     const rows = filteredTuitions
       .map(
-        (t) =>
-          `"${t.studentName}","${t.schoolCode}","K${String(t.birthYear).slice(-2)}","${t.className}",${t.sessionCount},${t.feePerSession},${t.totalAmount},"${t.paymentReference}","${t.status}"`
+        (t, idx) =>
+          `${idx + 1},"${t.studentName}","${t.schoolCode}","K${String(t.birthYear).slice(-2)}","${t.className}",${t.sessionCount},${t.feePerSession},${t.totalAmount},"${t.paymentReference}","${t.status}"`
       )
       .join('\n');
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -362,6 +362,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
               <tr>
+                <th className="py-3 px-3 text-center w-12">STT</th>
                 <th className="py-3 px-4">Học sinh</th>
                 <th className="py-3 px-4">Trường & Khóa</th>
                 <th className="py-3 px-4">Lớp học</th>
@@ -376,6 +377,9 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {filteredTuitions.map((tui, idx) => (
                 <tr key={`${tui.id}-${tui.classId || idx}`} className="hover:bg-blue-50/40 transition-colors">
+                  <td className="py-3.5 px-3 text-center font-bold text-slate-400">
+                    {idx + 1}
+                  </td>
                   <td className="py-3.5 px-4">
                     <span className="font-bold text-slate-900 block">{tui.studentName}</span>
                     <span className="text-[11px] text-slate-400">
