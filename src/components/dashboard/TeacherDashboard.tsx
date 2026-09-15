@@ -100,7 +100,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </div>
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="max-w-xl lg:max-w-2xl">
+          <div className="max-w-xl lg:max-w-3xl xl:max-w-4xl">
             {/* Top Pill / Badge */}
             <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/80 border border-blue-200/80 text-[#0062ff] text-xs font-semibold shadow-2xs mb-3.5">
               <GraduationCap className="w-4 h-4 text-[#0062ff]" />
@@ -117,15 +117,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               Hệ thống đã tự động đồng bộ lịch học, điểm danh, bài tập và tự động rà soát học phí chuẩn mã VietQR cho tháng {selectedMonth}/{selectedYear}.
             </p>
 
-            {/* Quick Action Shortcuts */}
-            <div className="mt-5">
-              {/* Row 1: 3 buttons */}
-              <div className="flex flex-wrap items-center gap-3">
+            {/* Quick Action Shortcuts - Equal width, slightly smaller height, perfectly balanced */}
+            <div className="mt-4 sm:mt-5">
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
                 {/* Button 1: Tính học phí & Sinh QR (T9) */}
                 <button
                   type="button"
                   onClick={() => onNavigate('tuition', { month: selectedMonth, year: selectedYear })}
-                  className="px-4 sm:px-5 py-3 bg-[#0062ff] hover:bg-blue-600 text-white rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-xs flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
+                  className="w-full sm:w-[215px] xl:w-[220px] h-10 sm:h-[42px] px-3.5 py-2 bg-[#0062ff] hover:bg-blue-600 text-white rounded-xl text-xs sm:text-[13px] font-bold transition-all shadow-xs flex items-center justify-center gap-2 shrink-0 cursor-pointer whitespace-nowrap"
                 >
                   <CreditCard className="w-4 h-4 text-white shrink-0" />
                   <span>Tính học phí & Sinh QR (T{selectedMonth})</span>
@@ -135,9 +134,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigate('reconciliation', { month: selectedMonth, year: selectedYear })}
-                  className="px-4 sm:px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-2xs flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
+                  className="w-full sm:w-[215px] xl:w-[220px] h-10 sm:h-[42px] px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-xl text-xs sm:text-[13px] font-bold transition-all shadow-2xs flex items-center justify-center gap-2 shrink-0 cursor-pointer whitespace-nowrap"
                 >
-                  <div className="w-6 h-6 rounded-lg bg-[#e0effe] text-[#0062ff] flex items-center justify-center shrink-0">
+                  <div className="w-5 h-5 rounded-md bg-[#e0effe] text-[#0062ff] flex items-center justify-center shrink-0">
                     <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                   </div>
                   <span>Đối soát sao kê tự động</span>
@@ -147,26 +146,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigate('attendance')}
-                  className="px-4 sm:px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-2xs flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
+                  className="w-full sm:w-[215px] xl:w-[220px] h-10 sm:h-[42px] px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-xl text-xs sm:text-[13px] font-bold transition-all shadow-2xs flex items-center justify-center gap-2 shrink-0 cursor-pointer whitespace-nowrap"
                 >
-                  <div className="w-6 h-6 rounded-lg bg-[#ede9fe] text-[#7c3aed] flex items-center justify-center shrink-0">
+                  <div className="w-5 h-5 rounded-md bg-[#ede9fe] text-[#7c3aed] flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                   </div>
                   <span>Điểm danh lớp</span>
                 </button>
-              </div>
 
-              {/* Row 2: 1 button */}
-              <div className="mt-3">
+                {/* Button 4: Chỉnh sửa thông tin GV */}
                 <button
                   type="button"
                   onClick={() => onNavigate('tenant-settings')}
-                  className="px-4 sm:px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-2xs flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
+                  className="w-full sm:w-[215px] xl:w-[220px] h-10 sm:h-[42px] px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-xl text-xs sm:text-[13px] font-bold transition-all shadow-2xs flex items-center justify-center gap-2 shrink-0 cursor-pointer whitespace-nowrap"
                 >
-                  <div className="w-6 h-6 rounded-lg bg-[#ffe4e6] text-[#e11d48] flex items-center justify-center shrink-0">
+                  <div className="w-5 h-5 rounded-md bg-[#ffe4e6] text-[#e11d48] flex items-center justify-center shrink-0">
                     <Edit3 className="w-3.5 h-3.5" />
                   </div>
-                  <span>Chỉnh sửa thông tin Tenant</span>
+                  <span>Chỉnh sửa thông tin GV</span>
                 </button>
               </div>
             </div>
