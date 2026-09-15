@@ -340,10 +340,19 @@ export async function parseStudentExcelFile(
 
       const notes = colMap.notes !== undefined ? String(row[colMap.notes] || '').trim() : '';
 
+      // Infer birthYear from K11, K10, K9 classes if applicable
+      let resolvedBirthYear = birthYear;
+      for (const cName of enrolledClassNames) {
+        const u = cName.toUpperCase();
+        if (u.includes('K11')) { resolvedBirthYear = 2011; break; }
+        if (u.includes('K10')) { resolvedBirthYear = 2010; break; }
+        if (u.includes('K9')) { resolvedBirthYear = 2009; break; }
+      }
+
       parsedRows.push({
         fullName,
         dob,
-        birthYear,
+        birthYear: resolvedBirthYear,
         phone,
         email: rawEmail,
         schoolName: matchedSchool?.name || rawSchool || '',

@@ -14,8 +14,10 @@ import {
   CheckCheck,
   RefreshCw,
   Calendar,
+  FileText,
 } from 'lucide-react';
 import { VietQRModal } from './VietQRModal';
+import { TuitionPdfExportModal } from './TuitionPdfExportModal';
 
 export interface TuitionPageProps {
   initialMonth?: number;
@@ -79,6 +81,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   }, [initialMonth, initialYear, initialSchool, initialClassId, initialStatus]);
 
   const [selectedTuitionForQR, setSelectedTuitionForQR] = useState<TuitionItem | null>(null);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
 
   const filteredTuitions = tuitionItems.filter((t) => {
     const matchesMonth = t.periodMonth === selectedMonth && t.periodYear === selectedYear;
@@ -171,6 +174,20 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                 : selectedClassId !== 'ALL'
                 ? `Tính lại học phí ${classes.find((c) => c.id === selectedClassId)?.name || 'lớp'} (T${selectedMonth}/${selectedYear})`
                 : `Tính lại học phí T${selectedMonth}/${selectedYear}`}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsPdfModalOpen(true)}
+            className="inline-flex items-center space-x-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-98"
+            title="Tạo và tải file thông báo học phí theo lớp học dạng PDF"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>
+              {selectedClassId !== 'ALL'
+                ? `Xuất PDF Thu Tiền (${classes.find((c) => c.id === selectedClassId)?.name || 'Lớp'})`
+                : 'Xuất PDF Thu Tiền Theo Lớp'}
             </span>
           </button>
 
@@ -489,6 +506,15 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
           onClose={() => setSelectedTuitionForQR(null)}
         />
       )}
+
+      {/* PDF Export Modal */}
+      <TuitionPdfExportModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+        initialClassId={selectedClassId}
+      />
 
       {/* Toast Notification */}
       {toastMessage && (

@@ -72,7 +72,16 @@ export const StudentManager: React.FC = () => {
 
     const isNoSchool = !schoolId || schoolId.trim() === '';
     const selectedSch = !isNoSchool ? schools.find((sch) => sch.id === schoolId) : null;
-    const birthYear = dob ? (new Date(dob).getFullYear() || 2010) : 2010;
+    let birthYear = dob ? (new Date(dob).getFullYear() || 2010) : 2010;
+    if (!dob && enrolledClasses.length > 0) {
+      const selectedClasses = classes.filter((c) => enrolledClasses.includes(c.id));
+      for (const sc of selectedClasses) {
+        const u = sc.name.toUpperCase();
+        if (u.includes('K11')) { birthYear = 2011; break; }
+        if (u.includes('K10')) { birthYear = 2010; break; }
+        if (u.includes('K9')) { birthYear = 2009; break; }
+      }
+    }
 
     addStudent({
       fullName: fullName.trim(),
