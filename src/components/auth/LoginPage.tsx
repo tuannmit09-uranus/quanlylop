@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import { auth } from '../../lib/firebase';
 import { getMemoryCustomCredentials, saveCustomCredentialsToFirestore } from '../../lib/firestoreSync';
+import { LoginPwaQrCard } from './LoginPwaQrCard';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -623,6 +624,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                   <LogIn className="w-4 h-4" />
                   <span>{loading ? 'Đang xác thực...' : 'Đăng nhập vào Hệ thống'}</span>
                 </button>
+
+                {/* QR Code & PWA Installation Card */}
+                <LoginPwaQrCard />
               </form>
             </div>
           ) : (

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="edututor-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <linearGradient id="cap-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e0e7ff" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  
+  <!-- Background with squircle border radius for maskable compatibility -->
+  <rect width="512" height="512" rx="112" fill="url(#edututor-grad)" />
+  
+  <!-- Inner circular badge -->
+  <circle cx="256" cy="256" r="190" fill="#ffffff" fill-opacity="0.12" />
+
+  <!-- Graduation Cap Icon (Lucide GraduationCap inspired, centered in safe zone) -->
+  <g transform="translate(256, 230) scale(10)" filter="url(#shadow)">
+    <!-- Cap top rhombus -->
+    <path d="M 0 -10 L 16 -3 L 0 4 L -16 -3 Z" fill="url(#cap-accent)" />
+    
+    <!-- Cap skull cap base -->
+    <path d="M -11 -0.5 L -11 5.5 C -11 9.5, 11 9.5, 11 5.5 L 11 -0.5 C 7 1.5, -7 1.5, -11 -0.5 Z" fill="#ffffff" fill-opacity="0.9" />
+    
+    <!-- Tassel and cord -->
+    <path d="M 12 -1.2 L 12 7.5 C 12 8.5, 13.5 8.5, 13.5 7.5 L 13.5 -0.6" stroke="#fbbf24" stroke-width="1.2" stroke-linecap="round" fill="none" />
+    <circle cx="12.7" cy="8.2" r="1" fill="#fbbf24" />
+  </g>
+  
+  <!-- Bottom Text Pill: EduTutor -->
+  <g transform="translate(256, 400)">
+    <rect x="-90" y="-20" width="180" height="40" rx="20" fill="#ffffff" fill-opacity="0.95" />
+    <text x="0" y="7" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="900" fill="#1d4ed8" text-anchor="middle" letter-spacing="0.5">EDUTUTOR</text>
+  </g>
+</svg>

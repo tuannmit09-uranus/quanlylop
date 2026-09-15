@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import { NavTabId } from './Sidebar';
 import { AuthModal } from '../auth/AuthModal';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 import { auth } from '../../lib/firebase';
 import { signOut } from 'firebase/auth';
 import {
@@ -307,6 +308,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
               <Database className="w-3.5 h-3.5 text-emerald-600" />
               <span className="text-[11px] font-bold">Firestore Live</span>
             </button>
+
+            {/* In-app PWA Install Button */}
+            <PWAInstallButton compact />
 
             {/* Notification Bell */}
             <div className="relative">
