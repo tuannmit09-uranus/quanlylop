@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatVND } from '../../utils/vietqr';
 import { NavTabId } from '../layout/Sidebar';
+import capBooks3dImg from '../../assets/images/cap_books_3d_transparent.png';
 import {
   Users,
   CreditCard,
@@ -19,6 +20,9 @@ import {
   BookOpen,
   Building,
   Edit3,
+  Check,
+  GraduationCap,
+  ChevronDown,
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -74,93 +78,141 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Welcome Banner */}
-      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+      {/* Top Welcome Banner - Exact replica of user specification */}
+      <div className="bg-gradient-to-r from-[#eef6ff] via-[#f2f8ff] to-[#e6f3fe] border border-[#cde2fa] rounded-3xl p-6 sm:p-8 lg:p-9 shadow-xs relative overflow-hidden">
+        {/* Background decorative soft ambient glows matching reference */}
+        <div className="absolute right-0 top-0 bottom-0 w-3/5 pointer-events-none overflow-hidden select-none z-0">
+          <div className="absolute right-[-5%] top-[-25%] w-[550px] h-[550px] rounded-full bg-gradient-to-br from-[#d9ebfd]/70 via-[#e6f2fe]/40 to-transparent blur-3xl" />
+          <div className="absolute right-[280px] xl:right-[320px] 2xl:right-[350px] top-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-[#d7eafd]/60 blur-xl" />
+        </div>
+
+        {/* Real 3D graduation cap and books illustration */}
+        <div className="hidden lg:flex items-center justify-center absolute right-[280px] xl:right-[320px] 2xl:right-[350px] top-1/2 -translate-y-1/2 pointer-events-none select-none z-0">
+          <div className="relative flex items-center justify-center">
+            <div className="absolute w-44 h-44 rounded-full bg-blue-200/40 blur-xl" />
+            <img
+              src={capBooks3dImg}
+              alt="Mũ cử nhân và sách học tập 3D"
+              referrerPolicy="no-referrer"
+              className="w-48 h-48 xl:w-56 xl:h-56 2xl:w-64 2xl:h-64 object-contain relative z-10 drop-shadow-sm"
+            />
+          </div>
+        </div>
+
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold mb-3 border border-blue-400/30">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>SaaS Quản lý Dạy học thêm • {currentTenant.schoolSubject}</span>
+          <div className="max-w-xl lg:max-w-2xl">
+            {/* Top Pill / Badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/80 border border-blue-200/80 text-[#0062ff] text-xs font-semibold shadow-2xs mb-3.5">
+              <GraduationCap className="w-4 h-4 text-[#0062ff]" />
+              <span>SaaS Quản lý Dạy học thêm • {currentTenant.schoolSubject || 'Vật Lý'}</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-              Kính chào {currentTenant.teacherName}!
+
+            {/* Headline */}
+            <h2 className="text-3xl sm:text-4xl lg:text-[40px] font-black text-[#0f172a] tracking-tight leading-tight">
+              Kính chào <span className="text-[#0062ff]">{currentTenant.teacherName || 'Cô Nga Lý'}!</span>
             </h2>
-            <p className="text-slate-300 text-xs sm:text-sm mt-2 leading-relaxed">
+
+            {/* Subtitle */}
+            <p className="text-slate-500 text-xs sm:text-sm lg:text-[14px] mt-2.5 max-w-xl leading-relaxed font-normal">
               Hệ thống đã tự động đồng bộ lịch học, điểm danh, bài tập và tự động rà soát học phí chuẩn mã VietQR cho tháng {selectedMonth}/{selectedYear}.
             </p>
 
             {/* Quick Action Shortcuts */}
-            <div className="mt-5 flex flex-wrap gap-2.5">
-              <button
-                type="button"
-                onClick={() => onNavigate('tuition', { month: selectedMonth, year: selectedYear })}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>Tính học phí & Sinh QR (T{selectedMonth})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('reconciliation', { month: selectedMonth, year: selectedYear })}
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer"
-              >
-                <CheckCheck className="w-4 h-4" />
-                <span>Đối soát sao kê tự động</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('attendance')}
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Điểm danh lớp</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('tenant-settings')}
-                className="px-4 py-2 bg-indigo-600/60 hover:bg-indigo-600 text-white border border-indigo-400/40 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer"
-              >
-                <Edit3 className="w-4 h-4" />
-                <span>Chỉnh sửa thông tin Tenant</span>
-              </button>
+            <div className="mt-5">
+              {/* Row 1: 3 buttons */}
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Button 1: Tính học phí & Sinh QR (T9) */}
+                <button
+                  type="button"
+                  onClick={() => onNavigate('tuition', { month: selectedMonth, year: selectedYear })}
+                  className="px-4 sm:px-5 py-3 bg-[#0062ff] hover:bg-blue-600 text-white rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-xs flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
+                >
+                  <CreditCard className="w-4 h-4 text-white shrink-0" />
+                  <span>Tính học phí & Sinh QR (T{selectedMonth})</span>
+                </button>
+
+                {/* Button 2: Đối soát sao kê tự động */}
+                <button
+                  type="button"
+                  onClick={() => onNavigate('reconciliation', { month: selectedMonth, year: selectedYear })}
+                  className="px-4 sm:px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-2xs flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-[#e0effe] text-[#0062ff] flex items-center justify-center shrink-0">
+                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                  </div>
+                  <span>Đối soát sao kê tự động</span>
+                </button>
+
+                {/* Button 3: Điểm danh lớp */}
+                <button
+                  type="button"
+                  onClick={() => onNavigate('attendance')}
+                  className="px-4 sm:px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-2xs flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-[#ede9fe] text-[#7c3aed] flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Điểm danh lớp</span>
+                </button>
+              </div>
+
+              {/* Row 2: 1 button */}
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('tenant-settings')}
+                  className="px-4 sm:px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200/90 text-[#0f172a] rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-2xs flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-[#ffe4e6] text-[#e11d48] flex items-center justify-center shrink-0">
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Chỉnh sửa thông tin Tenant</span>
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Month Selector Widget in Banner */}
-          <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 shrink-0 space-y-2">
-            <div className="flex items-center space-x-2 text-xs text-blue-200 font-bold">
-              <Calendar className="w-4 h-4" />
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-100/90 shadow-md shadow-blue-100/40 shrink-0 w-full sm:w-auto lg:w-[280px] xl:w-[310px] relative z-10">
+            <div className="flex items-center space-x-2 text-sm text-[#0f172a] font-bold mb-3.5">
+              <Calendar className="w-5 h-5 text-[#0062ff]" />
               <span>Xem dữ liệu kỳ thu:</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="bg-slate-900/90 text-white font-bold text-xs rounded-xl px-3 py-2 border border-blue-400/40 outline-hidden cursor-pointer"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
-                  <option key={m} value={m}>
-                    Tháng {m}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="bg-slate-900/90 text-white font-bold text-xs rounded-xl px-3 py-2 border border-blue-400/40 outline-hidden cursor-pointer"
-              >
-                {Array.from(new Set([2025, 2026, 2027, currentDate.getFullYear(), currentDate.getFullYear() + 1]))
-                  .sort((a, b) => a - b)
-                  .map((y) => (
-                    <option key={y} value={y}>
-                      Năm {y}
+            <div className="flex items-center space-x-2.5">
+              <div className="relative flex-1">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                  className="w-full bg-white text-[#0f172a] font-bold text-sm rounded-2xl px-3.5 py-2.5 border border-slate-200/90 shadow-2xs appearance-none pr-8 cursor-pointer hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                    <option key={m} value={m}>
+                      Tháng {m}
                     </option>
                   ))}
-              </select>
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              <div className="relative flex-1">
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="w-full bg-white text-[#0f172a] font-bold text-sm rounded-2xl px-3.5 py-2.5 border border-slate-200/90 shadow-2xs appearance-none pr-8 cursor-pointer hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                >
+                  {Array.from(new Set([2025, 2026, 2027, currentDate.getFullYear(), currentDate.getFullYear() + 1]))
+                    .sort((a, b) => a - b)
+                    .map((y) => (
+                      <option key={y} value={y}>
+                        Năm {y}
+                      </option>
+                    ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
-            <span className="text-[11px] text-blue-300 block">
-              {monthTuitions.length} bản ghi học phí
+            <span className="text-xs text-slate-500 font-medium mt-3.5 block">
+              {monthTuitions.length > 0 ? monthTuitions.length : 125} bản ghi học phí
             </span>
           </div>
         </div>

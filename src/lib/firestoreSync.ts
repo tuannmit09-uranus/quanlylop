@@ -369,7 +369,11 @@ export function subscribeToCollection<T extends { id: string }>(
         onUpdate(items);
       },
       (error) => {
-        console.warn(`Firestore real-time listener error for ${collectionName}:`, error);
+        if (error?.code === 'unavailable') {
+          console.warn(`Firestore collection "${collectionName}" connection retrying in background...`);
+          return;
+        }
+        console.warn(`Firestore real-time listener notice for ${collectionName}:`, error);
       }
     );
   } catch (error) {

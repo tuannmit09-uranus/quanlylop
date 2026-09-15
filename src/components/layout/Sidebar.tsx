@@ -1,26 +1,25 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import {
-  LayoutDashboard,
+  LayoutGrid,
+  Layers,
   Users,
+  Key,
+  School,
   BookOpen,
   Calendar,
   Clock,
   CheckSquare,
   FileText,
-  Award,
-  BookMarked,
+  User,
+  Backpack,
   CreditCard,
-  FileSpreadsheet,
-  CheckCheck,
-  History,
-  BarChart3,
-  Settings,
-  ShieldAlert,
+  PieChart,
+  BarChart2,
+  Bookmark,
   Building2,
-  Layers,
+  ShieldCheck,
   Sparkles,
-  KeyRound,
 } from 'lucide-react';
 
 export type NavTabId =
@@ -52,87 +51,234 @@ interface SidebarProps {
   onSelectTab: (tab: NavTabId) => void;
 }
 
+interface NavItem {
+  id: NavTabId;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconBg: string;
+  badge?: string;
+  highlight?: boolean;
+}
+
+interface NavGroup {
+  group: string;
+  items: NavItem[];
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, currentTab, onSelectTab }) => {
   const selectedTab = activeTab || currentTab || 'dashboard';
   const { currentRole, currentUser } = useApp();
 
   const effectiveRole = currentUser?.role || currentRole;
 
-  const teacherNavGroups = [
+  const teacherNavGroups: NavGroup[] = [
     {
       group: 'TỔNG QUAN',
       items: [
-        { id: 'dashboard', label: 'Bảng điều khiển', icon: LayoutDashboard, badge: 'KPI' },
+        {
+          id: 'dashboard',
+          label: 'Bảng điều khiển',
+          icon: LayoutGrid,
+          iconBg: 'bg-blue-100 text-blue-600',
+          badge: 'KPI',
+        },
       ],
     },
     {
       group: 'QUẢN LÝ ĐÀO TẠO',
       items: [
-        { id: 'classes', label: 'Lớp học', icon: Layers },
-        { id: 'students', label: 'Học sinh & Phụ huynh', icon: Users },
-        { id: 'accounts', label: 'Cấp tài khoản & PH', icon: KeyRound, highlight: true },
-        { id: 'schools', label: 'Trường học', icon: Building2 },
-        { id: 'subjects', label: 'Môn học', icon: BookOpen },
+        {
+          id: 'classes',
+          label: 'Lớp học',
+          icon: Layers,
+          iconBg: 'bg-sky-100 text-sky-600',
+        },
+        {
+          id: 'students',
+          label: 'Học sinh & Phụ huynh',
+          icon: Users,
+          iconBg: 'bg-emerald-100 text-emerald-600',
+        },
+        {
+          id: 'accounts',
+          label: 'Cấp tài khoản & PH',
+          icon: Key,
+          iconBg: 'bg-amber-100 text-amber-600',
+          highlight: true,
+        },
+        {
+          id: 'schools',
+          label: 'Trường học',
+          icon: School,
+          iconBg: 'bg-purple-100 text-purple-600',
+        },
+        {
+          id: 'subjects',
+          label: 'Môn học',
+          icon: BookOpen,
+          iconBg: 'bg-rose-100 text-rose-500',
+        },
       ],
     },
     {
       group: 'LỊCH & BUỔI HỌC',
       items: [
-        { id: 'schedules', label: 'Lịch học cố định', icon: Calendar },
-        { id: 'sessions', label: 'Buổi học thực tế', icon: Clock, badge: 'Đổi lịch' },
-        { id: 'attendance', label: 'Điểm danh', icon: CheckSquare },
+        {
+          id: 'schedules',
+          label: 'Lịch học cố định',
+          icon: Calendar,
+          iconBg: 'bg-blue-100 text-blue-600',
+        },
+        {
+          id: 'sessions',
+          label: 'Buổi học thực tế',
+          icon: Clock,
+          iconBg: 'bg-emerald-100 text-emerald-600',
+          badge: 'Đổi lịch',
+        },
+        {
+          id: 'attendance',
+          label: 'Điểm danh',
+          icon: CheckSquare,
+          iconBg: 'bg-orange-100 text-orange-600',
+        },
       ],
     },
     {
       group: 'DẠY HỌC & BÀI TẬP',
       items: [
-        { id: 'lessons', label: 'Bài học', icon: FileText },
-        { id: 'evaluations', label: 'Nhận xét & Điểm số', icon: Award },
-        { id: 'homework', label: 'Bài tập về nhà', icon: BookMarked },
+        {
+          id: 'lessons',
+          label: 'Bài học',
+          icon: FileText,
+          iconBg: 'bg-purple-100 text-purple-600',
+        },
+        {
+          id: 'evaluations',
+          label: 'Nhận xét & Điểm số',
+          icon: User,
+          iconBg: 'bg-rose-100 text-rose-500',
+        },
+        {
+          id: 'homework',
+          label: 'Bài tập về nhà',
+          icon: Backpack,
+          iconBg: 'bg-sky-100 text-sky-600',
+        },
       ],
     },
     {
       group: 'HỌC PHÍ & TÀI CHÍNH',
       items: [
-        { id: 'tuition', label: 'Quản lý học phí & VietQR', icon: CreditCard, highlight: true },
-        { id: 'reconciliation', label: 'Sao kê & Đối soát tự động', icon: CheckCheck, highlight: true },
+        {
+          id: 'tuition',
+          label: 'Quản lý học phí & VietQR',
+          icon: CreditCard,
+          iconBg: 'bg-emerald-100 text-emerald-600',
+          highlight: true,
+        },
+        {
+          id: 'reconciliation',
+          label: 'Sao kê & Đối soát tự động',
+          icon: PieChart,
+          iconBg: 'bg-purple-100 text-purple-600',
+          highlight: true,
+        },
       ],
     },
     {
       group: 'BÁO CÁO & THỐNG KÊ',
       items: [
-        { id: 'reports', label: 'Báo cáo doanh thu & điểm', icon: BarChart3 },
-        { id: 'learning-history', label: 'Lịch sử học tập', icon: Award },
+        {
+          id: 'reports',
+          label: 'Báo cáo doanh thu & điểm',
+          icon: BarChart2,
+          iconBg: 'bg-orange-100 text-orange-500',
+        },
+        {
+          id: 'learning-history',
+          label: 'Lịch sử học tập',
+          icon: Bookmark,
+          iconBg: 'bg-rose-100 text-rose-500',
+        },
       ],
     },
     {
       group: 'HỆ THỐNG & CÀI ĐẶT',
       items: [
-        { id: 'tenant-settings', label: 'Hồ sơ Tenant & Giáo viên', icon: Building2, highlight: true },
-        { id: 'payment-settings', label: 'Tài khoản nhận tiền (VietQR)', icon: CreditCard },
-        { id: 'audit-logs', label: 'Nhật ký Audit Log', icon: ShieldAlert },
+        {
+          id: 'tenant-settings',
+          label: 'Hồ sơ Tenant & Giáo viên',
+          icon: Building2,
+          iconBg: 'bg-blue-100 text-blue-600',
+          highlight: true,
+        },
+        {
+          id: 'payment-settings',
+          label: 'Tài khoản nhận tiền (VietQR)',
+          icon: CreditCard,
+          iconBg: 'bg-slate-100 text-slate-500',
+        },
+        {
+          id: 'audit-logs',
+          label: 'Nhật ký Audit Log',
+          icon: ShieldCheck,
+          iconBg: 'bg-emerald-100 text-emerald-600',
+        },
       ],
     },
   ];
 
-  const parentNavGroups = [
+  const parentNavGroups: NavGroup[] = [
     {
       group: 'DÀNH CHO PHỤ HUYNH',
       items: [
-        { id: 'dashboard', label: 'Tổng quan học tập', icon: LayoutDashboard },
-        { id: 'sessions', label: 'Lịch học & Điểm danh', icon: Clock },
-        { id: 'tuition', label: 'Học phí & Quét mã VietQR', icon: CreditCard, highlight: true },
+        {
+          id: 'dashboard',
+          label: 'Tổng quan học tập',
+          icon: LayoutGrid,
+          iconBg: 'bg-blue-100 text-blue-600',
+        },
+        {
+          id: 'sessions',
+          label: 'Lịch học & Điểm danh',
+          icon: Clock,
+          iconBg: 'bg-emerald-100 text-emerald-600',
+        },
+        {
+          id: 'tuition',
+          label: 'Học phí & Quét mã VietQR',
+          icon: CreditCard,
+          iconBg: 'bg-emerald-100 text-emerald-600',
+          highlight: true,
+        },
       ],
     },
   ];
 
-  const studentNavGroups = [
+  const studentNavGroups: NavGroup[] = [
     {
       group: 'DÀNH CHO HỌC SINH',
       items: [
-        { id: 'dashboard', label: 'Góc học tập & Nộp bài', icon: LayoutDashboard },
-        { id: 'evaluations', label: 'Lời phê & Điểm số', icon: Award },
-        { id: 'tuition', label: 'Xem học phí & VietQR', icon: CreditCard, highlight: true },
+        {
+          id: 'dashboard',
+          label: 'Góc học tập & Nộp bài',
+          icon: LayoutGrid,
+          iconBg: 'bg-blue-100 text-blue-600',
+        },
+        {
+          id: 'evaluations',
+          label: 'Nhận xét & Điểm số',
+          icon: User,
+          iconBg: 'bg-rose-100 text-rose-500',
+        },
+        {
+          id: 'tuition',
+          label: 'Xem học phí & VietQR',
+          icon: CreditCard,
+          iconBg: 'bg-emerald-100 text-emerald-600',
+          highlight: true,
+        },
       ],
     },
   ];
@@ -145,54 +291,60 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, currentTab, onSelec
       : teacherNavGroups;
 
   return (
-    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 min-h-[calc(100vh-4rem)] select-none border-r border-slate-800">
-      <div className="p-4 flex-1 overflow-y-auto space-y-6">
+    <aside className="w-68 sm:w-72 bg-white flex flex-col shrink-0 min-h-[calc(100vh-4rem)] select-none border-r border-slate-200/80 shadow-xs">
+      <div className="p-3.5 flex-1 overflow-y-auto space-y-4">
         {navGroups.map((group, gIdx) => (
-          <div key={gIdx}>
-            <div className="text-[11px] font-semibold tracking-wider text-slate-500 uppercase px-3 mb-2">
+          <div key={gIdx} className="space-y-1">
+            <div className="text-[11px] font-bold tracking-wider text-slate-500 uppercase px-2.5 pt-1.5 pb-1">
               {group.group}
             </div>
+
             <div className="space-y-1">
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = selectedTab === item.id;
+                const isSpecial = item.highlight || isActive;
+
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => onSelectTab(item.id as NavTabId)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-                      isActive
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40 font-semibold'
-                        : item.highlight
-                        ? 'text-blue-300 hover:bg-slate-800/80 hover:text-white bg-blue-950/30'
-                        : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-200'
+                    onClick={() => onSelectTab(item.id)}
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-2xl text-[13px] transition-all cursor-pointer text-left ${
+                      isSpecial
+                        ? 'bg-[#e6f0fe] text-blue-600 font-bold'
+                        : 'text-slate-800 font-semibold hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center space-x-2.5">
-                      <Icon
-                        className={`w-4 h-4 ${
-                          isActive ? 'text-white' : item.highlight ? 'text-blue-400' : 'text-slate-400'
-                        }`}
-                      />
+                    <div className="flex items-center space-x-3 min-w-0">
+                      {/* Colorful rounded square icon container */}
+                      <div
+                        className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${item.iconBg}`}
+                      >
+                        <Icon className="w-4 h-4" />
+                      </div>
+
                       <span className="truncate">{item.label}</span>
                     </div>
 
-                    {item.badge && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${
-                          isActive
-                            ? 'bg-blue-700 text-white'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
+                    {/* Right action/badge */}
+                    <div className="flex items-center space-x-1.5 shrink-0 pl-1">
+                      {item.badge === 'KPI' && (
+                        <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#d2e3fc] text-blue-700">
+                          KPI
+                        </span>
+                      )}
 
-                    {item.highlight && !item.badge && !isActive && (
-                      <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                    )}
+                      {item.badge === 'Đổi lịch' && (
+                        <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#e0effe] text-blue-600">
+                          Đổi lịch
+                        </span>
+                      )}
+
+                      {item.highlight && (
+                        <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -202,20 +354,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, currentTab, onSelec
       </div>
 
       {/* Role Indicator Footer */}
-      <div className="p-4 border-t border-slate-800 bg-slate-950/60">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-blue-400 border border-slate-700">
+      <div className="p-3.5 border-t border-slate-100 bg-white">
+        <div className="flex items-center space-x-3 px-1">
+          <div className="w-9 h-9 rounded-full bg-[#0062ff] flex items-center justify-center text-xs font-bold text-white shadow-xs shrink-0">
             {effectiveRole === 'parent' ? 'PH' : effectiveRole === 'student' ? 'HS' : 'GV'}
           </div>
-          <div className="text-xs">
-            <div className="font-semibold text-slate-200">
+          <div className="min-w-0">
+            <div className="text-[13px] font-bold text-slate-900 truncate leading-tight">
               {effectiveRole === 'parent'
                 ? 'Quyền: Phụ Huynh'
                 : effectiveRole === 'student'
                 ? 'Quyền: Học Sinh'
-                : 'Quyền: Giáo Viên (Tenant)'}
+                : 'Quyền: Giáo viên (Tenant)'}
             </div>
-            <div className="text-[11px] text-slate-500">Bảo mật dữ liệu RLS</div>
+            <div className="text-[11px] text-slate-500 font-normal mt-0.5">
+              Bảo mật dữ liệu RLS
+            </div>
           </div>
         </div>
       </div>

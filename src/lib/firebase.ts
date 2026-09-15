@@ -1,9 +1,11 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import {
+  initializeFirestore,
   getFirestore,
   doc,
   getDoc,
+  getDocFromServer,
   setDoc,
   deleteDoc,
   collection,
@@ -20,10 +22,26 @@ import {
 } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// CRITICAL: Initialize Firestore with databaseId as specified in config
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// CRITICAL: Initialize Firestore with databaseId and experimentalForceLongPolling
+// This ensures reliable connectivity in browser iframe and proxy sandbox environments
+// avoiding "FirebaseError: [code=unavailable]: The operation could not be completed"
+export const db = (() => {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalForceLongPolling: true,
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch (e) {
+    console.warn('initializeFirestore fallback to getFirestore:', e);
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+})();
+
 export const auth = getAuth(app);
 export const storage = getStorage(app, firebaseConfig.storageBucket || undefined);
 
