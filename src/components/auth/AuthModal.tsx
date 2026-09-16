@@ -9,7 +9,11 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth';
+import { REMEMBERED_ACCOUNT_STORAGE_KEY, RememberedAccountData } from './LoginPage';
 import {
   User,
   Mail,
@@ -27,6 +31,7 @@ import {
   Sparkles,
   ShieldCheck,
   ArrowRight,
+  Trash2,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -61,6 +66,75 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginRole, setLoginRole] = useState<UserRole>('teacher');
+  const [rememberAccount, setRememberAccount] = useState(false);
+  const [savedIdentifier, setSavedIdentifier] = useState<string | null>(null);
+
+  // Restore remembered account on open
+  React.useEffect(() => {
+    if (isOpen) {
+      try {
+        const raw = localStorage.getItem(REMEMBERED_ACCOUNT_STORAGE_KEY);
+        if (raw) {
+          const parsed: RememberedAccountData = JSON.parse(raw);
+          if (parsed && parsed.remembered && parsed.identifier) {
+            setSavedIdentifier(parsed.identifier);
+            setLoginEmail(parsed.identifier);
+            setRememberAccount(true);
+            if (parsed.role) {
+              setLoginRole(parsed.role);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load remembered account in modal:', err);
+      }
+    }
+  }, [isOpen]);
+
+  const handleClearSavedAccount = () => {
+    try {
+      localStorage.removeItem(REMEMBERED_ACCOUNT_STORAGE_KEY);
+    } catch (e) {
+      console.warn('Failed to remove remembered account:', e);
+    }
+    setSavedIdentifier(null);
+    setLoginEmail('');
+    setLoginPassword('');
+    setRememberAccount(false);
+  };
+
+  const saveOrClearRememberedAccount = async (identifier: string, role: UserRole) => {
+    if (rememberAccount) {
+      try {
+        const data: RememberedAccountData = {
+          remembered: true,
+          identifier: identifier.trim(),
+          role,
+        };
+        localStorage.setItem(REMEMBERED_ACCOUNT_STORAGE_KEY, JSON.stringify(data));
+        setSavedIdentifier(identifier.trim());
+      } catch (e) {
+        console.warn('Unable to persist remembered account:', e);
+      }
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (e) {
+        console.warn('Firebase setPersistence local warning:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem(REMEMBERED_ACCOUNT_STORAGE_KEY);
+        setSavedIdentifier(null);
+      } catch (e) {
+        console.warn('Unable to clear remembered account:', e);
+      }
+      try {
+        await setPersistence(auth, browserSessionPersistence);
+      } catch (e) {
+        console.warn('Firebase setPersistence session warning:', e);
+      }
+    }
+  };
 
   // Register form state
   const [regName, setRegName] = useState('');
@@ -239,6 +313,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           }
         }
 
+        await saveOrClearRememberedAccount(rawInput, effectiveRole);
         switchRole(effectiveRole);
         setSuccessMsg(`Đăng nhập thành công! Chào mừng ${effectiveName}`);
         setTimeout(() => {
@@ -262,6 +337,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           tenant_id: targetTenantId,
         });
 
+        await saveOrClearRememberedAccount(rawInput, effectiveRole);
         switchRole(effectiveRole);
         setSuccessMsg(`Đăng nhập thành công! Chào mừng ${user.email || rawInput}`);
         setTimeout(() => {
@@ -276,6 +352,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           role: effectiveRole,
           tenant_id: targetTenantId,
         });
+        await saveOrClearRememberedAccount(rawInput, effectiveRole);
         switchRole(effectiveRole);
         setSuccessMsg(`Đăng nhập thành công (${effectiveName})`);
         setTimeout(() => {
@@ -525,6 +602,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-hidden bg-slate-50/50"
                     />
                   </div>
+                </div>
+
+                {/* Remember Account Checkbox & Clear Option */}
+                <div className="flex items-center justify-between pt-0.5 pb-0.5">
+                  <label
+                    htmlFor="remember-account-modal"
+                    className="inline-flex items-center space-x-2.5 cursor-pointer select-none min-h-[44px] py-1 text-slate-700 hover:text-slate-900 group"
+                  >
+                    <input
+                      id="remember-account-modal"
+                      type="checkbox"
+                      checked={rememberAccount}
+                      onChange={(e) => setRememberAccount(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 focus:ring-2 cursor-pointer"
+                    />
+                    <span className="text-xs font-semibold group-hover:text-blue-700 transition-colors">
+                      Ghi nhớ tài khoản
+                    </span>
+                  </label>
+
+                  {savedIdentifier && (
+                    <button
+                      type="button"
+                      onClick={handleClearSavedAccount}
+                      className="inline-flex items-center space-x-1 text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-1.5 rounded-lg transition-colors cursor-pointer min-h-[44px]"
+                      title="Xóa tài khoản đã lưu khỏi trình duyệt này"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Xóa tài khoản đã lưu</span>
+                    </button>
+                  )}
                 </div>
 
                 <button

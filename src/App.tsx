@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar, NavTabId } from './components/layout/Sidebar';
@@ -66,6 +66,29 @@ const AppContent: React.FC = () => {
     lessonId?: string;
   } | null>(null);
 
+  const mainContentRef = useRef<HTMLElement | null>(null);
+
+  // Scroll restoration: Reset scroll to top (0, 0) upon tab change or user authentication
+  useEffect(() => {
+    // Dismiss any active mobile keyboard
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    // 1. Reset window and document scroll
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
+
+    // 2. Reset main scroll container
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      mainContentRef.current.scrollTop = 0;
+    }
+  }, [activeTab, currentUser?.id]);
+
   // If user is not logged in, render the standalone Login & Register page
   if (!currentUser) {
     return (
@@ -110,6 +133,21 @@ const AppContent: React.FC = () => {
       setEvaluationFilterParams(params);
     }
     setActiveTab(tab as NavTabId);
+    setIsMobileDrawerOpen(false);
+
+    // Instant scroll restoration
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      mainContentRef.current.scrollTop = 0;
+    }
   };
 
   const renderContent = () => {
@@ -325,6 +363,7 @@ const AppContent: React.FC = () => {
 
         {/* Dynamic Main Content Canvas */}
         <main
+          ref={mainContentRef}
           className={`flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 min-w-0 ${
             currentRole === 'teacher' ? 'pb-24 lg:pb-8' : 'pb-8'
           }`}

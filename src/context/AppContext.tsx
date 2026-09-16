@@ -81,9 +81,13 @@ import {
 } from '../lib/firestoreSync';
 import confetti from 'canvas-confetti';
 
-// Policy: ZERO data persistence in localStorage. Erase any legacy artifacts immediately.
+// Policy: ZERO database persistence in localStorage. Erase any legacy artifacts immediately while preserving user's remembered account preference.
 try {
+  const rememberedAccount = localStorage.getItem('edututor_remembered_account');
   localStorage.clear();
+  if (rememberedAccount) {
+    localStorage.setItem('edututor_remembered_account', rememberedAccount);
+  }
 } catch {}
 
 interface AppContextType {

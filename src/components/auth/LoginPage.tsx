@@ -9,6 +9,9 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth';
 import {
   GraduationCap,
@@ -32,7 +35,17 @@ import {
   QrCode,
   Calendar,
   Layers,
+  Trash2,
+  HelpCircle,
 } from 'lucide-react';
+
+export const REMEMBERED_ACCOUNT_STORAGE_KEY = 'edututor_remembered_account';
+
+export interface RememberedAccountData {
+  remembered: boolean;
+  identifier: string; // Phone number or Email (Strictly NO passwords, NO tokens, NO credentials)
+  role?: UserRole;    // UI preference only - real authorization is always derived from system backend
+}
 
 interface LoginPageProps {
   onOpenActivationModal?: (token: string) => void;
@@ -60,6 +73,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginRole, setLoginRole] = useState<UserRole>('teacher');
+  const [rememberAccount, setRememberAccount] = useState(false);
+  const [savedIdentifier, setSavedIdentifier] = useState<string | null>(null);
+  const [showForgotPasswordHelp, setShowForgotPasswordHelp] = useState(false);
 
   // Register form state
   const [regName, setRegName] = useState('');
@@ -73,6 +89,91 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Scroll restoration: Ensure LoginPage starts at top 0 when mounted
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
+  }, []);
+
+  // Restore remembered account from storage on load
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(REMEMBERED_ACCOUNT_STORAGE_KEY);
+      if (raw) {
+        const parsed: RememberedAccountData = JSON.parse(raw);
+        if (parsed && parsed.remembered && parsed.identifier) {
+          setSavedIdentifier(parsed.identifier);
+          setLoginEmail(parsed.identifier);
+          setRememberAccount(true);
+          if (parsed.role) {
+            setLoginRole(parsed.role);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load remembered account:', err);
+    }
+  }, []);
+
+  const handleClearSavedAccount = () => {
+    try {
+      localStorage.removeItem(REMEMBERED_ACCOUNT_STORAGE_KEY);
+    } catch (e) {
+      console.warn('Failed to remove remembered account:', e);
+    }
+    setSavedIdentifier(null);
+    setLoginEmail('');
+    setLoginPassword('');
+    setRememberAccount(false);
+  };
+
+  const saveOrClearRememberedAccount = async (identifier: string, role: UserRole) => {
+    if (rememberAccount) {
+      try {
+        const data: RememberedAccountData = {
+          remembered: true,
+          identifier: identifier.trim(),
+          role,
+        };
+        localStorage.setItem(REMEMBERED_ACCOUNT_STORAGE_KEY, JSON.stringify(data));
+        setSavedIdentifier(identifier.trim());
+      } catch (e) {
+        console.warn('Unable to persist remembered account:', e);
+      }
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (e) {
+        console.warn('Firebase setPersistence local warning:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem(REMEMBERED_ACCOUNT_STORAGE_KEY);
+        setSavedIdentifier(null);
+      } catch (e) {
+        console.warn('Unable to clear remembered account:', e);
+      }
+      try {
+        await setPersistence(auth, browserSessionPersistence);
+      } catch (e) {
+        console.warn('Firebase setPersistence session warning:', e);
+      }
+    }
+  };
+
+  const resetScrollAndDismissKeyboard = () => {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
+  };
 
   // Handle Login submission
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -217,7 +318,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
           }
         }
 
+        await saveOrClearRememberedAccount(rawInput, effectiveRole);
         switchRole(effectiveRole);
+        resetScrollAndDismissKeyboard();
         setLoading(false);
         return;
       } else {
@@ -247,7 +350,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
           role: effectiveRole,
           tenant_id: targetTenantId,
         });
+        await saveOrClearRememberedAccount(rawInput, effectiveRole);
         switchRole(effectiveRole);
+        resetScrollAndDismissKeyboard();
         setLoading(false);
         return;
       } catch (err: any) {
@@ -357,6 +462,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
 
       switchTenant(newTenant.id);
       switchRole('teacher');
+      resetScrollAndDismissKeyboard();
 
       setCurrentUser({
         id: uid,
@@ -518,7 +624,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                       value={manualTokenInput}
                       onChange={(e) => setManualTokenInput(e.target.value)}
                       placeholder="VD: tok-stu-2-demo hoặc dán toàn bộ URL"
-                      className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
+                      className="flex-1 px-3 py-2 text-base lg:text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
                     />
                     <button
                       type="button"
@@ -589,7 +695,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
                       placeholder="VD: 0972 334 455 hoặc hoanglong.le@gmail.com"
-                      className="w-full pl-10 pr-3.5 py-2.5 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                     />
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1">
@@ -610,9 +716,42 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full pl-10 pr-3.5 py-2.5 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                     />
                   </div>
+                </div>
+
+                {/* 4. Remember Account Checkbox & Clear Option */}
+                <div className="flex items-center justify-between pt-0.5 pb-0.5">
+                  <label
+                    htmlFor="remember-account-checkbox"
+                    className="inline-flex items-center space-x-2.5 cursor-pointer select-none min-h-[44px] py-1 text-slate-700 hover:text-slate-900 group"
+                  >
+                    <input
+                      id="remember-account-checkbox"
+                      type="checkbox"
+                      checked={rememberAccount}
+                      onChange={(e) => setRememberAccount(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 focus:ring-2 cursor-pointer"
+                    />
+                    <span className="text-xs font-semibold group-hover:text-blue-700 transition-colors">
+                      Ghi nhớ tài khoản
+                    </span>
+                  </label>
+
+                  {savedIdentifier && (
+                    <div className="flex items-center space-x-1.5 text-right">
+                      <button
+                        type="button"
+                        onClick={handleClearSavedAccount}
+                        className="inline-flex items-center space-x-1 text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer min-h-[44px]"
+                        title="Xóa tài khoản đã lưu khỏi trình duyệt này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Xóa tài khoản đã lưu</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Submit Action */}
@@ -624,6 +763,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                   <LogIn className="w-4 h-4" />
                   <span>{loading ? 'Đang xác thực...' : 'Đăng nhập vào Hệ thống'}</span>
                 </button>
+
+                {/* Forgot password help link */}
+                <div className="text-center pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPasswordHelp(!showForgotPasswordHelp)}
+                    className="text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors cursor-pointer inline-flex items-center space-x-1 py-1 min-h-[36px]"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Quên mật khẩu?</span>
+                  </button>
+                  {showForgotPasswordHelp && (
+                    <div className="mt-2 p-3 bg-blue-50/90 border border-blue-200 rounded-xl text-[11px] text-blue-900 text-left leading-relaxed animate-in fade-in">
+                      <p className="font-bold mb-1">Hướng dẫn khôi phục mật khẩu:</p>
+                      <ul className="list-disc pl-4 space-y-1 text-slate-700">
+                        <li><strong>Học sinh & Phụ huynh:</strong> Vui lòng liên hệ trực tiếp với Giáo viên quản lý lớp để được cấp lại mật khẩu hoặc gửi lại đường link kích hoạt.</li>
+                        <li><strong>Giáo viên:</strong> Vui lòng liên hệ Quản trị viên hệ thống qua email <code>tuannmit09@uranustech.vn</code> để được hỗ trợ đặt lại mật khẩu.</li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
 
                 {/* QR Code & PWA Installation Card */}
                 <LoginPwaQrCard />
@@ -651,7 +811,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
                     placeholder="Ví dụ: Thầy Trần Hoàng Nam"
-                    className="w-full pl-10 pr-3.5 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
+                    className="w-full pl-10 pr-3.5 py-2 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                   />
                 </div>
               </div>
@@ -667,7 +827,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     placeholder="nam.tran@edututor.vn"
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
+                    className="w-full px-3.5 py-2 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                   />
                 </div>
                 <div>
@@ -681,7 +841,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     placeholder="Tối thiểu 6 ký tự"
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
+                    className="w-full px-3.5 py-2 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                   />
                 </div>
               </div>
@@ -698,7 +858,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                     value={regTenantName}
                     onChange={(e) => setRegTenantName(e.target.value)}
                     placeholder="Ví dụ: Lớp Toán Chất Lượng Cao Thầy Nam"
-                    className="w-full pl-10 pr-3.5 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
+                    className="w-full pl-10 pr-3.5 py-2 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                   />
                 </div>
               </div>
@@ -711,7 +871,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                   <select
                     value={regSubject}
                     onChange={(e) => setRegSubject(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
+                    className="w-full px-3.5 py-2 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                   >
                     <option value="Toán THPT">Toán THPT</option>
                     <option value="Vật Lý">Vật Lý</option>
@@ -731,7 +891,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
                     placeholder="0912 345 678"
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
+                    className="w-full px-3.5 py-2 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                   />
                 </div>
               </div>
