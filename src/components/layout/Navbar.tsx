@@ -27,14 +27,20 @@ import {
   Key,
   Database,
   UploadCloud,
+  Menu,
 } from 'lucide-react';
 
 interface NavbarProps {
   onNavigate?: (tab: NavTabId) => void;
   onOpenNotifications?: () => void;
+  onOpenMobileMenu?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  onNavigate,
+  onOpenNotifications,
+  onOpenMobileMenu,
+}) => {
   const {
     currentTenant,
     tenants,
@@ -107,21 +113,31 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo & Tenant Name */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm font-bold text-lg">
-              <GraduationCap className="w-6 h-6" />
+          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+            {/* Hamburger button (Mobile & Tablet < 1024px) */}
+            <button
+              type="button"
+              onClick={onOpenMobileMenu}
+              className="lg:hidden p-2 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Mở menu quản trị"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm font-bold text-lg shrink-0">
+              <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-2">
-                <span className="text-base font-bold text-slate-900 tracking-tight">
+                <span className="text-base font-bold text-slate-900 tracking-tight truncate">
                   EduTutor
                 </span>
                 {isAdmin ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
                     👑 Quản Trị Viên (Admin)
                   </span>
                 ) : (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
                     SaaS Multi-Tenant
                   </span>
                 )}
@@ -136,10 +152,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                       className="flex items-center text-xs text-slate-700 hover:text-blue-600 font-semibold transition-colors cursor-pointer"
                       title="Quản trị viên: Nhấn để chuyển xem dữ liệu của từng Tenant"
                     >
-                      <span className="truncate max-w-[200px] sm:max-w-[280px]">
+                      <span className="truncate max-w-[140px] sm:max-w-[280px]">
                         {currentTenant.name}
                       </span>
-                      <ChevronDown className="w-3.5 h-3.5 ml-1 text-slate-400" />
+                      <ChevronDown className="w-3.5 h-3.5 ml-1 text-slate-400 shrink-0" />
                     </button>
 
                     {showTenantMenu && (
@@ -197,10 +213,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                 ) : (
                   /* Teacher / Parent / Student: Only see their own fixed Tenant */
                   <div className="flex items-center text-xs text-slate-700 font-medium">
-                    <span className="truncate max-w-[200px] sm:max-w-[280px] font-semibold text-slate-800">
+                    <span className="truncate max-w-[130px] sm:max-w-[280px] font-semibold text-slate-800">
                       {currentTenant.name}
                     </span>
-                    <span className="ml-1.5 px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px] font-normal border border-slate-200">
+                    <span className="hidden sm:inline-block ml-1.5 px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px] font-normal border border-slate-200 truncate">
                       {currentTenant.teacherName}
                     </span>
                   </div>
@@ -210,8 +226,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
           </div>
 
           {/* Center / Right controls */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Quick Role Switcher Pill: Only show role buttons according to user role. For Student, show only Student; for Parent, show only Parent; for Teacher, show only Teacher; for Admin, allow switching */}
+          <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+            {/* Desktop Role Switcher Pill: Only visible on lg screens */}
+            <div className="hidden lg:flex items-center space-x-2">
             {isStudent ? (
               <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200/80">
                 <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-indigo-700 shadow-xs flex items-center space-x-1">
@@ -292,6 +309,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                 <span>PH em: {currentStudent.fullName} ({currentStudent.schoolCode})</span>
               </div>
             ) : null}
+            </div>
 
             {/* Cloud Firestore Status Badge & Quick Sync Button */}
             <button
@@ -323,12 +341,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                     setShowNotificationsDropdown(!showNotificationsDropdown);
                   }
                 }}
-                className="relative p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-hidden"
+                className="relative p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-hidden min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
                 title="Thông báo hệ thống"
+                aria-label="Thông báo"
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+                  <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
                     {unreadCount}
                   </span>
                 )}
@@ -415,7 +434,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, onOpenNotifications 
                   <button
                     type="button"
                     onClick={() => setShowUserDropdown(!showUserDropdown)}
-                    className="flex items-center space-x-2 p-1.5 pl-2.5 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200 text-blue-900 rounded-xl transition-all cursor-pointer"
+                    className="flex items-center space-x-1.5 sm:space-x-2 p-1.5 pl-2 sm:pl-2.5 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200 text-blue-900 rounded-xl transition-all cursor-pointer min-h-[44px] min-w-[44px] justify-center"
+                    aria-label="Tài khoản người dùng"
                   >
                     <div className="w-6 h-6 rounded-lg bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
                       {currentUser.role === 'admin' ? '👑' : (effectiveName ? effectiveName.charAt(0).toUpperCase() : 'GV')}

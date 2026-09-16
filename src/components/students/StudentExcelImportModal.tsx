@@ -187,23 +187,23 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
   return (
     <div
       id="student-excel-import-modal-overlay"
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
     >
       <div
         id="student-excel-import-modal"
-        className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col"
+        className="bg-white rounded-3xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl border border-slate-100 space-y-4 sm:space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">
                 Nhập Danh Sách Học Sinh Từ Excel
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-[11px] sm:text-xs text-slate-500">
                 Tải lên file danh sách hoặc dán nhanh. Các trường dữ liệu là{' '}
                 <strong className="text-emerald-700 font-semibold">không yêu cầu bắt buộc</strong>.
               </p>
@@ -212,7 +212,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 min-w-[36px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -414,7 +414,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
                 </button>
               </div>
 
-              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs max-h-60 overflow-y-auto">
+              <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-2xs max-h-60 overflow-y-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200 sticky top-0">
                     <tr>

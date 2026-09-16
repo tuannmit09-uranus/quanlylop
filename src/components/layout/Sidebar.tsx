@@ -20,6 +20,8 @@ import {
   Building2,
   ShieldCheck,
   Sparkles,
+  X,
+  GraduationCap,
 } from 'lucide-react';
 
 export type NavTabId =
@@ -49,6 +51,8 @@ interface SidebarProps {
   activeTab?: NavTabId;
   currentTab?: NavTabId;
   onSelectTab: (tab: NavTabId) => void;
+  isMobileDrawer?: boolean;
+  onCloseMobile?: () => void;
 }
 
 interface NavItem {
@@ -65,11 +69,24 @@ interface NavGroup {
   items: NavItem[];
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, currentTab, onSelectTab }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  currentTab,
+  onSelectTab,
+  isMobileDrawer = false,
+  onCloseMobile,
+}) => {
   const selectedTab = activeTab || currentTab || 'dashboard';
   const { currentRole, currentUser } = useApp();
 
   const effectiveRole = currentUser?.role || currentRole;
+
+  const handleItemClick = (id: NavTabId) => {
+    onSelectTab(id);
+    if (isMobileDrawer && onCloseMobile) {
+      onCloseMobile();
+    }
+  };
 
   const teacherNavGroups: NavGroup[] = [
     {
@@ -291,7 +308,40 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, currentTab, onSelec
       : teacherNavGroups;
 
   return (
-    <aside className="w-68 sm:w-72 bg-white flex flex-col shrink-0 min-h-[calc(100vh-4rem)] select-none border-r border-slate-200/80 shadow-xs">
+    <aside
+      className={`${
+        isMobileDrawer
+          ? 'w-full h-full bg-white flex flex-col select-none'
+          : 'w-68 sm:w-72 bg-white flex flex-col shrink-0 min-h-[calc(100vh-4rem)] select-none border-r border-slate-200/80 shadow-xs'
+      }`}
+    >
+      {/* Mobile Drawer Header */}
+      {isMobileDrawer && (
+        <div className="p-4 border-b border-slate-200/90 flex items-center justify-between bg-slate-50/80">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold shadow-xs">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-sm font-bold text-slate-900 block leading-tight">
+                Menu Quản Trị
+              </span>
+              <span className="text-[11px] text-slate-500 font-medium">
+                EduTutor Pro
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-colors cursor-pointer"
+            aria-label="Đóng menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       <div className="p-3.5 flex-1 overflow-y-auto space-y-4">
         {navGroups.map((group, gIdx) => (
           <div key={gIdx} className="space-y-1">
@@ -309,8 +359,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, currentTab, onSelec
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => onSelectTab(item.id)}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-2xl text-[13px] transition-all cursor-pointer text-left ${
+                    onClick={() => handleItemClick(item.id)}
+                    className={`w-full flex items-center justify-between px-2.5 py-2.5 rounded-2xl text-[13px] transition-all cursor-pointer text-left ${
                       isSpecial
                         ? 'bg-[#e6f0fe] text-blue-600 font-bold'
                         : 'text-slate-800 font-semibold hover:bg-slate-50'
@@ -354,7 +404,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, currentTab, onSelec
       </div>
 
       {/* Role Indicator Footer */}
-      <div className="p-3.5 border-t border-slate-100 bg-white">
+      <div
+        className="p-3.5 border-t border-slate-100 bg-white"
+        style={isMobileDrawer ? { paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))' } : undefined}
+      >
         <div className="flex items-center space-x-3 px-1">
           <div className="w-9 h-9 rounded-full bg-[#0062ff] flex items-center justify-center text-xs font-bold text-white shadow-xs shrink-0">
             {effectiveRole === 'parent' ? 'PH' : effectiveRole === 'student' ? 'HS' : 'GV'}

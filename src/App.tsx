@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar, NavTabId } from './components/layout/Sidebar';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
 
 // Pages & Components
 import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
@@ -34,6 +35,7 @@ import { AccountActivationModal } from './components/accounts/AccountActivationM
 const AppContent: React.FC = () => {
   const { currentRole, currentTenant, currentUser } = useApp();
   const [activeTab, setActiveTab] = useState<NavTabId>('dashboard');
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [globalQRItem, setGlobalQRItem] = useState<any | null>(null);
   const [activateToken, setActivateToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -289,18 +291,56 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100/60 text-slate-900 flex flex-col font-sans antialiased">
       {/* Top Navbar with Multi-tenant & Role selector */}
-      <Navbar onNavigate={(tab) => handleNavigate(tab)} />
+      <Navbar
+        onNavigate={(tab) => handleNavigate(tab)}
+        onOpenMobileMenu={() => setIsMobileDrawerOpen(true)}
+      />
 
       {/* Main App Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <Sidebar activeTab={activeTab} onSelectTab={(tab) => handleNavigate(tab)} />
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Sidebar (Desktop >= 1024px) */}
+        <div className="hidden lg:flex shrink-0">
+          <Sidebar activeTab={activeTab} onSelectTab={(tab) => handleNavigate(tab)} />
+        </div>
+
+        {/* Mobile Sidebar Drawer (< 1024px) */}
+        {isMobileDrawerOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden flex">
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity animate-in fade-in"
+              onClick={() => setIsMobileDrawerOpen(false)}
+            />
+            {/* Slide-out Drawer */}
+            <div className="relative w-[85vw] max-w-sm h-full bg-white shadow-2xl z-10 flex flex-col animate-in slide-in-from-left duration-200">
+              <Sidebar
+                activeTab={activeTab}
+                onSelectTab={(tab) => handleNavigate(tab)}
+                isMobileDrawer={true}
+                onCloseMobile={() => setIsMobileDrawerOpen(false)}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Dynamic Main Content Canvas */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">{renderContent()}</div>
+        <main
+          className={`flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 min-w-0 ${
+            currentRole === 'teacher' ? 'pb-24 lg:pb-8' : 'pb-8'
+          }`}
+        >
+          <div className="max-w-7xl mx-auto min-w-0">{renderContent()}</div>
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation for Teacher role */}
+      {currentRole === 'teacher' && (
+        <MobileBottomNav
+          activeTab={activeTab}
+          onSelectTab={(tab) => handleNavigate(tab)}
+          onOpenMore={() => setIsMobileDrawerOpen(true)}
+        />
+      )}
 
       {/* Global VietQR modal if opened from anywhere */}
       {globalQRItem && (

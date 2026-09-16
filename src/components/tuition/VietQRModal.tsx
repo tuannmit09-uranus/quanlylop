@@ -45,13 +45,13 @@ export const VietQRModal: React.FC<VietQRModalProps> = ({ tuition, onClose }) =>
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 relative max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-100 relative max-h-[92vh] overflow-y-auto">
         {/* Close button */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm transition-colors"
+          className="absolute top-4 right-4 w-9 h-9 min-w-[36px] min-h-[36px] rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm transition-colors"
         >
           ✕
         </button>
@@ -184,13 +184,13 @@ export const VietQRModal: React.FC<VietQRModalProps> = ({ tuition, onClose }) =>
                 updateTuitionStatus(tuition.id, 'paid');
                 onClose();
               }}
-              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs transition-colors shadow-xs flex items-center justify-center space-x-1.5"
+              className="w-full min-h-[44px] py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl font-bold text-xs transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>Mô phỏng: Đánh dấu đã nộp học phí</span>
             </button>
           ) : (
-            <div className="w-full py-2.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-semibold text-xs text-center flex items-center justify-center space-x-1.5">
+            <div className="w-full min-h-[44px] py-2.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-semibold text-xs text-center flex items-center justify-center space-x-1.5">
               <Check className="w-4 h-4 text-emerald-600" />
               <span>Khoản học phí này đã được đối soát thành công</span>
             </div>
@@ -199,7 +199,7 @@ export const VietQRModal: React.FC<VietQRModalProps> = ({ tuition, onClose }) =>
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-2 text-slate-600 hover:text-slate-900 rounded-xl font-medium text-xs transition-colors"
+            className="w-full min-h-[42px] py-2 text-slate-600 hover:text-slate-900 rounded-xl font-medium text-xs transition-colors cursor-pointer"
           >
             Đóng cửa sổ
           </button>

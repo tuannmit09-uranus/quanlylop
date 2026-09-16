@@ -533,7 +533,7 @@ export const TuitionPdfExportModal: React.FC<TuitionPdfExportModalProps> = ({
               type="button"
               onClick={onClose}
               disabled={isExporting}
-              className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium text-xs rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              className="flex-1 sm:flex-initial min-h-[42px] px-4 py-2 text-slate-600 hover:text-slate-800 font-medium text-xs rounded-xl hover:bg-slate-100 transition-colors cursor-pointer text-center"
             >
               Đóng
             </button>
@@ -542,7 +542,7 @@ export const TuitionPdfExportModal: React.FC<TuitionPdfExportModalProps> = ({
               type="button"
               onClick={handleExportPDF}
               disabled={classTuitions.length === 0 || isExporting}
-              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md transition-colors cursor-pointer flex items-center space-x-2"
+              className="flex-1 sm:flex-initial min-h-[44px] px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md transition-colors cursor-pointer flex items-center justify-center space-x-2"
             >
               {isExporting ? (
                 <>

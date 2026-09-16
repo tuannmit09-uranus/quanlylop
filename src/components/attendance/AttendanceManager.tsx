@@ -159,17 +159,17 @@ export const AttendanceManager: React.FC = () => {
       </div>
 
       {/* Select Class, Month & Session Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-3 w-full lg:w-auto">
           {/* 1. Chọn lớp */}
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="text-[11px] font-bold text-slate-400 block mb-1">Chọn lớp:</label>
             <select
               value={selectedClassId}
               onChange={(e) => {
                 setSelectedClassId(e.target.value);
               }}
-              className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer text-slate-800"
+              className="w-full text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer text-slate-800 min-h-[42px]"
             >
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -179,13 +179,13 @@ export const AttendanceManager: React.FC = () => {
             </select>
           </div>
 
-          {/* 2. Chọn tháng (vị trí Bên trái Chọn ngày/buổi học) */}
-          <div>
+          {/* 2. Chọn tháng */}
+          <div className="w-full sm:w-auto">
             <label className="text-[11px] font-bold text-slate-400 block mb-1">Chọn tháng:</label>
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer text-slate-800"
+              className="w-full text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer text-slate-800 min-h-[42px]"
             >
               <option value="ALL">Tất cả tháng</option>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
@@ -197,13 +197,13 @@ export const AttendanceManager: React.FC = () => {
           </div>
 
           {/* 3. Chọn ngày/buổi học */}
-          <div>
+          <div className="w-full sm:col-span-2 lg:col-span-1 lg:w-auto">
             <label className="text-[11px] font-bold text-slate-400 block mb-1">Chọn ngày/buổi học:</label>
             <select
               value={selectedSessionId}
               onChange={(e) => setSelectedSessionId(e.target.value)}
               disabled={activeSessions.length === 0}
-              className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer text-slate-800 disabled:opacity-60 disabled:cursor-not-allowed min-w-[300px]"
+              className="w-full lg:min-w-[280px] text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-hidden cursor-pointer text-slate-800 disabled:opacity-60 disabled:cursor-not-allowed min-h-[42px]"
             >
               {activeSessions.length === 0 ? (
                 <option value="">(Không có buổi học nào trong tháng này)</option>
@@ -224,29 +224,29 @@ export const AttendanceManager: React.FC = () => {
 
         {/* Counter Badges */}
         {selectedSessionId ? (
-          <div className="flex items-center flex-wrap gap-2">
-            <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+          <div className="flex items-center flex-wrap gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+            <span className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border ${
               unmarkedCount > 0
                 ? 'bg-slate-100 text-slate-700 border-slate-300 font-semibold'
                 : 'bg-slate-50 text-slate-400 border-slate-200'
             }`}>
-              Chưa điểm danh: {unmarkedCount}
+              Chưa: {unmarkedCount}
             </span>
-            <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+            <span className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border ${
               presentCount > 0
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : 'bg-slate-50 text-slate-400 border-slate-200'
             }`}>
               Có mặt: {presentCount}
             </span>
-            <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+            <span className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border ${
               excusedCount > 0
                 ? 'bg-amber-50 text-amber-800 border-amber-200'
                 : 'bg-slate-50 text-slate-400 border-slate-200'
             }`}>
               Có phép: {excusedCount}
             </span>
-            <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+            <span className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border ${
               absentCount > 0
                 ? 'bg-red-50 text-red-800 border-red-200'
                 : 'bg-slate-50 text-slate-400 border-slate-200'
@@ -308,7 +308,8 @@ export const AttendanceManager: React.FC = () => {
               </span>
             </div>
           )}
-          <div className="overflow-x-auto">
+          {/* Desktop Table View (>= 768px) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
@@ -431,6 +432,125 @@ export const AttendanceManager: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View (< 768px) */}
+          <div className="block md:hidden divide-y divide-slate-100">
+            {classStudents.map((student, idx) => {
+              const record = sessionAttendance.find((a) => a.studentId === student.id);
+              const status = record?.status;
+
+              return (
+                <div key={student.id} className="p-4 space-y-3 bg-white">
+                  {/* Student Info Row */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0 border border-blue-200">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-slate-900 truncate">
+                          {student.fullName}
+                        </h4>
+                        <div className="flex items-center space-x-2 text-[11px] text-slate-500">
+                          <span>{student.schoolCode || student.schoolName}</span>
+                          <span>•</span>
+                          <span>PH: {student.parentPhone}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status indicator pill */}
+                    <span
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${
+                        status === 'present'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : status === 'excused'
+                          ? 'bg-amber-100 text-amber-800'
+                          : status === 'absent' || status === 'unexcused'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {status === 'present'
+                        ? 'Có mặt'
+                        : status === 'excused'
+                        ? 'Có phép'
+                        : status === 'absent' || status === 'unexcused'
+                        ? 'Vắng'
+                        : 'Chưa'}
+                    </span>
+                  </div>
+
+                  {/* 3 Large Action Buttons for Mobile */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleStatusChange(student.id, 'present')}
+                      className={`min-h-[44px] rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                        status === 'present'
+                          ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-600 ring-offset-1 font-bold'
+                          : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 active:scale-98'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Có mặt</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleStatusChange(student.id, 'excused')}
+                      className={`min-h-[44px] rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                        status === 'excused'
+                          ? 'bg-amber-500 text-white shadow-xs ring-2 ring-amber-500 ring-offset-1 font-bold'
+                          : 'bg-slate-100 text-slate-700 hover:bg-amber-50 active:scale-98'
+                      }`}
+                    >
+                      <Clock className="w-4 h-4" />
+                      <span>Có phép</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleStatusChange(student.id, 'absent')}
+                      className={`min-h-[44px] rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                        status === 'absent' || status === 'unexcused'
+                          ? 'bg-red-600 text-white shadow-xs ring-2 ring-red-600 ring-offset-1 font-bold'
+                          : 'bg-slate-100 text-slate-700 hover:bg-red-50 active:scale-98'
+                      }`}
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>Vắng</span>
+                    </button>
+                  </div>
+
+                  {/* Note input and reset */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      key={`mobile-${selectedSessionId}-${student.id}`}
+                      defaultValue={record?.note || ''}
+                      onBlur={(e) => {
+                        if (status) {
+                          markAttendance?.(selectedSessionId, student.id, status, e.target.value);
+                        }
+                      }}
+                      placeholder="Ghi chú buổi học..."
+                      className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 min-h-[40px] focus:ring-2 focus:ring-blue-500 outline-hidden bg-slate-50/60"
+                    />
+                    {status && (
+                      <button
+                        type="button"
+                        onClick={() => removeAttendance?.(selectedSessionId, student.id)}
+                        className="px-2.5 py-2 text-[11px] font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 rounded-xl min-h-[40px] shrink-0"
+                      >
+                        ✕ Xóa
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

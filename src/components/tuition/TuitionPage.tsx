@@ -375,7 +375,9 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
               <tr>
@@ -496,6 +498,96 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Card View (< 768px) */}
+        <div className="block md:hidden divide-y divide-slate-100">
+          {filteredTuitions.map((tui, idx) => (
+            <div key={`m-${tui.id}-${idx}`} className="p-4 space-y-3 bg-white">
+              {/* Header: Student Name, Class & Status */}
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
+                    <h4 className="text-sm font-bold text-slate-900">{tui.studentName}</h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {tui.className} • {tui.schoolCode} (K{String(tui.birthYear).slice(-2)})
+                  </p>
+                </div>
+
+                <span
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 flex items-center space-x-1 ${
+                    tui.status === 'paid'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {tui.status === 'paid' ? (
+                    <>
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Đã nộp</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-3 h-3" />
+                      <span>Chưa nộp</span>
+                    </>
+                  )}
+                </span>
+              </div>
+
+              {/* Fee Breakdown Box */}
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-2 text-xs">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Số buổi học:</span>
+                  <span className="font-bold text-slate-800">{tui.sessionCount} buổi × {formatVND(tui.feePerSession)}</span>
+                </div>
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60">
+                  <span className="font-bold text-slate-700">Tổng tiền:</span>
+                  <span className="text-base font-black text-blue-700">{formatVND(tui.totalAmount)}</span>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-500 text-[11px]">Mã CK:</span>
+                  <span className="font-mono font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs">
+                    {tui.paymentReference}
+                  </span>
+                </div>
+              </div>
+
+              {/* Mobile Action Buttons */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTuitionForQR(tui)}
+                  className="flex-1 min-h-[44px] rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center space-x-1.5 border border-blue-200 active:scale-98 transition-all cursor-pointer"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>VietQR</span>
+                </button>
+
+                {tui.status !== 'paid' ? (
+                  <button
+                    type="button"
+                    onClick={() => updateTuitionStatus(tui.id, 'paid')}
+                    className="flex-1 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs active:scale-98 transition-all cursor-pointer"
+                  >
+                    <CheckCheck className="w-4 h-4" />
+                    <span>Xác nhận nộp</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => updateTuitionStatus(tui.id, 'unpaid')}
+                    className="flex-1 min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center active:scale-98 transition-all cursor-pointer"
+                  >
+                    <span>Hoàn tác nộp</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        </>
         )}
       </div>
 

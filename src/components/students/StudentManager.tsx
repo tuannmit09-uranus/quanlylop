@@ -200,24 +200,24 @@ export const StudentManager: React.FC = () => {
       )}
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Tìm theo tên học sinh, SĐT, phụ huynh..."
-            className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-hidden bg-slate-50/50"
+            className="w-full pl-9 pr-4 py-2.5 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-hidden bg-slate-50/50 min-h-[42px]"
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 w-full md:w-auto">
           {/* School filter */}
           <select
             value={selectedSchoolCode}
             onChange={(e) => setSelectedSchoolCode(e.target.value)}
-            className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-hidden font-medium"
+            className="w-full md:w-auto text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 outline-hidden font-medium min-h-[42px]"
           >
             <option value="ALL">Tất cả trường học</option>
             <option value="NONE">Chưa cập nhật trường</option>
@@ -232,7 +232,7 @@ export const StudentManager: React.FC = () => {
           <select
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
-            className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-hidden font-medium"
+            className="w-full md:w-auto text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 outline-hidden font-medium min-h-[42px]"
           >
             <option value="ALL">Tất cả lớp học thêm</option>
             {classes.map((c) => (
@@ -246,7 +246,7 @@ export const StudentManager: React.FC = () => {
 
       {/* Student List Table */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
               <tr>
@@ -431,26 +431,128 @@ export const StudentManager: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Card View (< 768px) */}
+        <div className="block md:hidden divide-y divide-slate-100">
+          {filteredStudents.map((s, idx) => {
+            const enrolled = classes.filter((c) => s.enrolledClassIds.includes(c.id));
+            return (
+              <div
+                key={s.id}
+                onClick={() => setSelectedStudentForDrawer(s)}
+                className="p-4 space-y-3 bg-white active:bg-slate-50 cursor-pointer"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-sm shrink-0 overflow-hidden">
+                      {s.avatar ? (
+                        <img src={s.avatar} alt={s.fullName} className="w-full h-full object-cover" />
+                      ) : (
+                        s.fullName.charAt(0)
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-slate-900 truncate">{s.fullName}</h4>
+                      <p className="text-[11px] text-slate-500">
+                        {s.phone ? `SĐT: ${s.phone}` : 'Chưa có SĐT'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                      s.status === 'active'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {s.status === 'active' ? 'Đang học' : 'Nghỉ'}
+                  </span>
+                </div>
+
+                {/* School & Class details */}
+                <div className="bg-slate-50 rounded-xl p-2.5 text-xs space-y-1.5 border border-slate-100">
+                  <div className="flex items-center justify-between text-slate-700">
+                    <span className="text-slate-500 text-[11px]">Trường PT:</span>
+                    <span className="font-semibold truncate max-w-[200px]">
+                      {s.schoolName || 'Chưa cập nhật'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-700">
+                    <span className="text-slate-500 text-[11px]">Lớp học:</span>
+                    <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
+                      {enrolled.map((c) => (
+                        <span
+                          key={c.id}
+                          className="px-1.5 py-0.5 rounded bg-blue-100/70 text-blue-800 font-medium text-[10px]"
+                        >
+                          {c.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  {s.parentName && (
+                    <div className="flex items-center justify-between text-slate-700 pt-1 border-t border-slate-200/60">
+                      <span className="text-slate-500 text-[11px]">Phụ huynh:</span>
+                      <span className="font-medium text-slate-800 text-[11px]">
+                        {s.parentName} {s.parentPhone ? `(${s.parentPhone})` : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card Action Buttons */}
+                <div
+                  className="flex items-center gap-2 pt-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setEditingStudent(s)}
+                    className="flex-1 min-h-[44px] rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center justify-center space-x-1.5 active:scale-98 transition-all cursor-pointer"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>Sửa hồ sơ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStudentForDrawer(s)}
+                    className="flex-1 min-h-[44px] rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center justify-center space-x-1.5 active:scale-98 transition-all cursor-pointer"
+                  >
+                    <span>Xem chi tiết</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {filteredStudents.length === 0 && (
+            <div className="p-8 text-center text-slate-500 text-xs">
+              Không tìm thấy học sinh nào phù hợp bộ lọc.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Create Student Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-900 pb-3 border-b border-slate-100">
               Thêm học sinh mới
             </h3>
 
             <form onSubmit={handleCreateStudent} className="mt-4 space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
                   <label className="font-bold text-slate-700 block mb-1">Họ và tên học sinh:</label>
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Nguyễn Minh Tuấn"
-                    className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 min-h-[42px] focus:ring-2 focus:ring-blue-500 outline-hidden"
                     required
                   />
                 </div>
@@ -461,7 +563,7 @@ export const StudentManager: React.FC = () => {
                     type="date"
                     value={dob}
                     onChange={(e) => setDob(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 min-h-[42px] focus:ring-2 focus:ring-blue-500 outline-hidden"
                   />
                 </div>
 
@@ -472,7 +574,7 @@ export const StudentManager: React.FC = () => {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="0988 112 233"
-                    className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 min-h-[42px] focus:ring-2 focus:ring-blue-500 outline-hidden"
                   />
                 </div>
 
@@ -487,7 +589,7 @@ export const StudentManager: React.FC = () => {
                         setSchoolGrade('');
                       }
                     }}
-                    className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden bg-white"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 min-h-[42px] focus:ring-2 focus:ring-blue-500 outline-hidden bg-white"
                   >
                     <option value="">-- Chưa cập nhật trường --</option>
                     {schools.map((s) => (
@@ -505,14 +607,14 @@ export const StudentManager: React.FC = () => {
                     value={schoolGrade}
                     onChange={(e) => setSchoolGrade(e.target.value)}
                     placeholder={schoolId ? "10A1" : "Chưa cập nhật trường"}
-                    className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-hidden"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 min-h-[42px] focus:ring-2 focus:ring-blue-500 outline-hidden"
                   />
                 </div>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
                 <span className="font-bold text-slate-600 block">Thông tin phụ huynh</span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="font-semibold text-slate-600 block mb-0.5">Họ tên PH (tùy chọn):</label>
                     <input
@@ -520,7 +622,7 @@ export const StudentManager: React.FC = () => {
                       value={parentName}
                       onChange={(e) => setParentName(e.target.value)}
                       placeholder="Nguyễn Văn Hùng"
-                      className="w-full border border-slate-300 rounded-xl p-2 bg-white outline-hidden"
+                      className="w-full border border-slate-300 rounded-xl p-2 min-h-[40px] bg-white outline-hidden"
                     />
                   </div>
                   <div>
@@ -530,7 +632,7 @@ export const StudentManager: React.FC = () => {
                       value={parentPhone}
                       onChange={(e) => setParentPhone(e.target.value)}
                       placeholder="0988 123 456"
-                      className="w-full border border-slate-300 rounded-xl p-2 bg-white outline-hidden"
+                      className="w-full border border-slate-300 rounded-xl p-2 min-h-[40px] bg-white outline-hidden"
                     />
                   </div>
                 </div>
