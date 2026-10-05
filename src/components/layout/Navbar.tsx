@@ -29,6 +29,7 @@ import {
   Database,
   UploadCloud,
   Menu,
+  FileDown,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -609,6 +610,31 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             <div className="mt-4 space-y-4 text-sm text-slate-600">
+              {/* Word Manual Download Card */}
+              <div className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <FileDown className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                      <span>Sổ tay Hướng dẫn Sử dụng Đầy đủ (.DOCX)</span>
+                      <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">20 Ảnh minh họa</span>
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Tài liệu Word hoàn chỉnh gồm 12 chương hướng dẫn từng bước: Đăng nhập, Điểm danh, Học phí VietQR, Đối soát sao kê, Cấu hình hệ thống.
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href="/Huong_Dan_Su_Dung_EduTutor_Pro.docx"
+                  download="Huong_Dan_Su_Dung_EduTutor_Pro.docx"
+                  className="inline-flex items-center justify-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>Tải file Word (.docx)</span>
+                </a>
+              </div>
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5">
                 <h4 className="font-semibold text-blue-900 flex items-center">
                   <CheckCircle2 className="w-4 h-4 mr-1.5 text-blue-600" />

@@ -3,7 +3,7 @@ import { TenantSettingsPage } from './TenantSettingsPage';
 import { PaymentSettingsPage } from './PaymentSettingsPage';
 import { AuditLogPage } from './AuditLogPage';
 import { FirestoreDatabasePage } from './FirestoreDatabasePage';
-import { Building, ShieldAlert, CreditCard, Database } from 'lucide-react';
+import { Building, ShieldAlert, CreditCard, Database, FileDown } from 'lucide-react';
 
 export type SettingsTabId = 'tenant-settings' | 'payment-settings' | 'audit-logs' | 'firestore-db';
 
@@ -89,6 +89,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <ShieldAlert className="w-4 h-4" />
           <span>Nhật ký Audit Log</span>
         </button>
+
+        <a
+          href="/Huong_Dan_Su_Dung_EduTutor_Pro.docx"
+          download="Huong_Dan_Su_Dung_EduTutor_Pro.docx"
+          className="ml-auto flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer shadow-xs"
+          title="Tải về toàn bộ tài liệu hướng dẫn sử dụng file Word (.docx) kèm ảnh minh họa"
+        >
+          <FileDown className="w-4 h-4 text-emerald-600" />
+          <span>Tải Sổ tay HDSD (.docx)</span>
+        </a>
       </div>
 
       {/* Render Selected Component */}
