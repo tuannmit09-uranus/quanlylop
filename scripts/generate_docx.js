@@ -222,11 +222,11 @@ function createCallout(title, text, type = 'info') {
 }
 
 // Image with border and caption
-function createImageWithCaption(filename, caption, figureNumber, width = 550, height = 320) {
+function createImageWithCaption(filename, caption, figureNumber, width = 500, height = 290) {
   const filePath = path.join(ASSETS_DIR, filename);
   if (!fs.existsSync(filePath)) {
     console.warn(`File not found: ${filePath}`);
-    return new Paragraph({ text: `[Ảnh chưa sẵn sàng: ${filename}]` });
+    return [new Paragraph({ text: `[Ảnh chưa sẵn sàng: ${filename}]` })];
   }
 
   const imageData = fs.readFileSync(filePath);
@@ -238,6 +238,7 @@ function createImageWithCaption(filename, caption, figureNumber, width = 550, he
       children: [
         new ImageRun({
           data: imageData,
+          type: 'png',
           transformation: {
             width,
             height
@@ -828,7 +829,7 @@ async function buildDocx() {
           createP('EduTutor Pro cam kết đồng hành cùng các thầy cô và trung tâm đào tạo trên con đường chuyển đổi số giáo dục hiệu quả, hiện đại và bảo mật.'),
           createCallout(
             'Đường dây Hỗ trợ Kỹ thuật & Nghiệp vụ 24/7',
-            'Khi cần giải đáp thắc mắc hoặc yêu cầu bổ sung tính năng theo đặc thù trung tâm, vui lòng liên hệ:\n• Email hỗ trợ: support@edututor.vn / tuannmit09@uranustech.vn\n• Hotline kỹ thuật: 0988 888 999\n• Cổng thông tin trợ giúp: Mục trợ giúp trên thanh điều hướng ứng dụng EduTutor Pro.',
+            'Khi cần giải đáp thắc mắc hoặc yêu cầu bổ sung tính năng theo đặc thù trung tâm, vui lòng liên hệ:\n• SĐT / Zalo hỗ trợ: 0986.07.07.68\n• Email hỗ trợ: tuannmit09@gmail.com\n• Cổng thông tin trợ giúp: Mục trợ giúp trên thanh điều hướng ứng dụng EduTutor Pro.',
             'info'
           ),
           new Paragraph({ spacing: { after: 360 } }),

@@ -456,6 +456,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 t.id !== 'tenant-mai' &&
                 t.id !== 'tenant-tuan' &&
                 t.id !== 'tenant-tonga' &&
+                t.id !== 'tenant-1788330721941' &&
                 !deleted.has(t.id)
             );
             setTenants(cleaned);
@@ -2159,7 +2160,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     month: number,
     year: number
   ): GenerateSessionsResult => {
-    const targetClasses = classId === 'ALL' ? classes : classes.filter((c) => c.id === classId);
+    const targetClasses =
+      classId === 'ALL'
+        ? classes.filter((c) => c.tenant_id === currentTenant.id)
+        : classes.filter((c) => c.id === classId && (c.tenant_id === currentTenant.id || !c.tenant_id));
     if (targetClasses.length === 0) {
       return { created: [], deleted: [], updated: [] };
     }
@@ -2605,7 +2609,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!existing.some((a) => a.studentId === student.id)) {
           const newRec: AttendanceRecord = {
             id: `att-${sessionId}-${student.id}`,
-            tenant_id: currentTenant.id,
+            tenant_id: student.tenant_id || cls.tenant_id || currentTenant.id,
             sessionId,
             classId,
             studentId: student.id,
@@ -2824,8 +2828,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Tuition Calculation & Lock
   const calculateMonthlyTuition = (month: number, year: number, classFilterId?: string) => {
     const targetClasses = classFilterId
-      ? classes.filter((c) => c.id === classFilterId)
-      : classes.filter((c) => c.status === 'active');
+      ? classes.filter((c) => c.id === classFilterId && (c.tenant_id === currentTenant.id || !c.tenant_id))
+      : classes.filter((c) => c.status === 'active' && (c.tenant_id === currentTenant.id || !c.tenant_id));
 
     const generatedItems: TuitionItem[] = [];
 
@@ -2867,6 +2871,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           students
         );
 
+        const targetTenantId = student.tenant_id || cls.tenant_id || currentTenant.id;
+
         // Check if existing
         const existing = tuitionItems.find(
           (t) =>
@@ -2879,6 +2885,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (existing) {
           generatedItems.push({
             ...existing,
+            tenant_id: targetTenantId,
             eligibleSessionIds: sessionIds,
             sessionCount,
             totalAmount,
@@ -2889,7 +2896,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else {
           generatedItems.push({
             id: `tui-${studentId}-${cls.id}-${month}${year}`,
-            tenant_id: currentTenant.id,
+            tenant_id: targetTenantId,
             periodMonth: month,
             periodYear: year,
             studentId,

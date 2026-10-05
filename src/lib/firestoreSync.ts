@@ -11,7 +11,7 @@ import {
 import { db, saveDocumentToFirestore, deleteDocumentFromFirestore, cleanDataForFirestore, OperationType, handleFirestoreError } from './firebase';
 
 // In-memory runtime state (ZERO localStorage usage)
-const memoryDeletedTenantIds = new Set<string>();
+const memoryDeletedTenantIds = new Set<string>(['tenant-1788330721941']);
 let memoryIsInitialized = false;
 let memoryCustomCredentials: Record<string, string> = {
   'tonga190984@gmail.com': '123456a@',

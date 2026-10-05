@@ -537,13 +537,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
             ))}
           </div>
 
-          {/* Footer Security Badge */}
-          <div className="pt-4 border-t border-white/20 flex items-center justify-between text-xs text-blue-100 relative z-10">
-            <span className="flex items-center space-x-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-300" />
-              <span>Bảo mật Firestore & Firebase Auth</span>
-            </span>
-            <span className="font-semibold px-2 py-0.5 rounded-full bg-white/15">v2.5 Release</span>
+          {/* Footer Security Badge & Support Info */}
+          <div className="pt-4 border-t border-white/20 space-y-2.5 text-xs text-blue-100 relative z-10">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center space-x-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-300" />
+                <span>Bảo mật Firestore & Firebase Auth</span>
+              </span>
+              <span className="font-semibold px-2 py-0.5 rounded-full bg-white/15">v2.5 Release</span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-white/10 backdrop-blur-xs border border-white/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-white">
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 rounded-lg bg-emerald-400/30 flex items-center justify-center shrink-0">
+                  <Phone className="w-3.5 h-3.5 text-emerald-300" />
+                </div>
+                <div>
+                  <span className="text-[11px] text-blue-200">Hỗ trợ phần mềm (SĐT / Zalo):</span>
+                  <a href="https://zalo.me/0986070768" target="_blank" rel="noopener noreferrer" className="ml-1.5 font-bold hover:underline text-white">
+                    0986.07.07.68
+                  </a>
+                </div>
+              </div>
+              <div className="flex items-center space-x-1 text-[11px] text-blue-100">
+                <Mail className="w-3 h-3 text-blue-200 shrink-0" />
+                <a href="mailto:tuannmit09@gmail.com" className="hover:underline">
+                  tuannmit09@gmail.com
+                </a>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -779,7 +801,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                       <p className="font-bold mb-1">Hướng dẫn khôi phục mật khẩu:</p>
                       <ul className="list-disc pl-4 space-y-1 text-slate-700">
                         <li><strong>Học sinh & Phụ huynh:</strong> Vui lòng liên hệ trực tiếp với Giáo viên quản lý lớp để được cấp lại mật khẩu hoặc gửi lại đường link kích hoạt.</li>
-                        <li><strong>Giáo viên:</strong> Vui lòng liên hệ Quản trị viên hệ thống qua email <code>tuannmit09@uranustech.vn</code> để được hỗ trợ đặt lại mật khẩu.</li>
+                        <li><strong>Giáo viên & Quản trị:</strong> Vui lòng liên hệ Hỗ trợ phần mềm qua SĐT/Zalo: <a href="https://zalo.me/0986070768" target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 underline">0986.07.07.68</a> hoặc email: <a href="mailto:tuannmit09@gmail.com" className="font-bold text-blue-700 underline">tuannmit09@gmail.com</a> để được cấp lại mật khẩu nhanh chóng.</li>
                       </ul>
                     </div>
                   )}
@@ -787,6 +809,59 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
 
                 {/* QR Code & PWA Installation Card */}
                 <LoginPwaQrCard />
+
+                {/* Software Support Information Box */}
+                <div className="pt-2">
+                  <div className="p-3 bg-linear-to-r from-slate-50 to-blue-50/40 border border-slate-200 rounded-2xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-xs font-bold text-slate-800">
+                          Thông tin Hỗ trợ Phần mềm EduTutor Pro
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                        Hỗ trợ 24/7
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <a
+                        href="https://zalo.me/0986070768"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center space-x-2.5 p-2 bg-white hover:bg-emerald-50/80 border border-slate-200 hover:border-emerald-300 rounded-xl transition-all group"
+                        title="Bấm để nhắn Zalo hoặc gọi SĐT 0986.07.07.68"
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Phone className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-slate-400 font-medium">SĐT / Zalo</p>
+                          <p className="font-bold text-slate-900 group-hover:text-emerald-700 truncate">
+                            0986.07.07.68
+                          </p>
+                        </div>
+                      </a>
+
+                      <a
+                        href="mailto:tuannmit09@gmail.com"
+                        className="flex items-center space-x-2.5 p-2 bg-white hover:bg-blue-50/80 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group"
+                        title="Bấm để gửi email hỗ trợ tới tuannmit09@gmail.com"
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Mail className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-slate-400 font-medium">Email hỗ trợ</p>
+                          <p className="font-bold text-slate-900 group-hover:text-blue-700 truncate text-[11px]">
+                            tuannmit09@gmail.com
+                          </p>
+                        </div>
+                      </a>
+                    </div>
+                  </div>
+                </div>
               </form>
             </div>
           ) : (
@@ -904,6 +979,59 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                 <UserPlus className="w-4 h-4" />
                 <span>{loading ? 'Đang tạo tài khoản...' : 'Tạo Trung tâm & Tài khoản Giáo viên'}</span>
               </button>
+
+              {/* Software Support Information Box in Register Mode */}
+              <div className="pt-2">
+                <div className="p-3 bg-linear-to-r from-slate-50 to-emerald-50/40 border border-slate-200 rounded-2xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-xs font-bold text-slate-800">
+                        Hỗ trợ phần mềm & Khởi tạo Trung tâm
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                      Hỗ trợ 24/7
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <a
+                      href="https://zalo.me/0986070768"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-2.5 p-2 bg-white hover:bg-emerald-50/80 border border-slate-200 hover:border-emerald-300 rounded-xl transition-all group"
+                      title="Bấm để nhắn Zalo hoặc gọi SĐT 0986.07.07.68"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <Phone className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-slate-400 font-medium">SĐT / Zalo</p>
+                        <p className="font-bold text-slate-900 group-hover:text-emerald-700 truncate">
+                          0986.07.07.68
+                        </p>
+                      </div>
+                    </a>
+
+                    <a
+                      href="mailto:tuannmit09@gmail.com"
+                      className="flex items-center space-x-2.5 p-2 bg-white hover:bg-emerald-50/80 border border-slate-200 hover:border-emerald-300 rounded-xl transition-all group"
+                      title="Bấm để gửi email hỗ trợ tới tuannmit09@gmail.com"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <Mail className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-slate-400 font-medium">Email hỗ trợ</p>
+                        <p className="font-bold text-slate-900 group-hover:text-emerald-700 truncate text-[11px]">
+                          tuannmit09@gmail.com
+                        </p>
+                      </div>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </form>
           )}
 

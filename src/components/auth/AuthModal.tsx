@@ -657,6 +657,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </button>
                 </p>
               </div>
+
+              {/* Software Support Information Box in Modal */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span>Hỗ trợ phần mềm EduTutor</span>
+                    </span>
+                    <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
+                      Hotline 24/7
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
+                    <a
+                      href="https://zalo.me/0986070768"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-1.5 p-1.5 bg-white hover:bg-emerald-50 border border-slate-200 rounded-lg text-slate-800 transition-colors"
+                    >
+                      <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span className="truncate">Zalo: <strong>0986.07.07.68</strong></span>
+                    </a>
+                    <a
+                      href="mailto:tuannmit09@gmail.com"
+                      className="flex items-center space-x-1.5 p-1.5 bg-white hover:bg-blue-50 border border-slate-200 rounded-lg text-slate-800 transition-colors"
+                    >
+                      <Mail className="w-3 h-3 text-blue-600 shrink-0" />
+                      <span className="truncate"><strong>tuannmit09@gmail.com</strong></span>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
