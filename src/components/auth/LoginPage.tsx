@@ -47,6 +47,229 @@ export interface RememberedAccountData {
   role?: UserRole;    // UI preference only - real authorization is always derived from system backend
 }
 
+export interface ResolvedAccountInfo {
+  role: UserRole;
+  matchedType: 'admin' | 'student' | 'parent' | 'teacher' | 'unknown';
+  matchedStudent?: any;
+  matchedParent?: any;
+  matchedTenant?: any;
+  displayName: string;
+  targetTenantId?: string;
+  label: string;
+  badgeClass: string;
+}
+
+export function resolveAccount(
+  input: string,
+  data: {
+    students: any[];
+    parents: any[];
+    tenants: any[];
+    accountInvitations?: any[];
+    defaultTenantId?: string;
+  }
+): ResolvedAccountInfo | null {
+  const raw = (input || '').trim();
+  if (!raw) return null;
+  const normalized = raw.toLowerCase();
+  const digits = raw.replace(/\D/g, '');
+
+  // 1. Admin
+  if (
+    normalized === 'tuannmit09@gmail.com' ||
+    normalized === 'tuannmit09@uranustech.vn' ||
+    normalized === 'admin' ||
+    normalized.includes('admin')
+  ) {
+    return {
+      role: 'admin',
+      matchedType: 'admin',
+      displayName: 'Quản Trị Viên (Tuấn Admin)',
+      targetTenantId: data.defaultTenantId,
+      label: '👑 Quản Trị Viên (Admin)',
+      badgeClass: 'bg-amber-50 text-amber-900 border-amber-200',
+    };
+  }
+
+  // 2. Student (by phone, email, schoolCode, or ID)
+  const matchedStudent = data.students.find((s) => {
+    const sDigits = (s.phone || '').replace(/\D/g, '');
+    const isPhoneMatch =
+      digits.length >= 8 &&
+      sDigits.length >= 8 &&
+      (sDigits === digits || sDigits.endsWith(digits) || digits.endsWith(sDigits));
+    const isEmailMatch = s.email && s.email.toLowerCase().trim() === normalized;
+    const isCodeMatch =
+      (s.schoolCode && s.schoolCode.toLowerCase().trim() === normalized) ||
+      (s.id && s.id.toLowerCase() === normalized);
+    return isPhoneMatch || isEmailMatch || isCodeMatch;
+  });
+
+  if (matchedStudent) {
+    return {
+      role: 'student',
+      matchedType: 'student',
+      matchedStudent,
+      displayName: matchedStudent.fullName,
+      targetTenantId: matchedStudent.tenant_id,
+      label: `🎒 Học sinh: ${matchedStudent.fullName}${matchedStudent.schoolGrade ? ` (${matchedStudent.schoolGrade})` : ''}`,
+      badgeClass: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+    };
+  }
+
+  // 3. Parent (from parents collection)
+  const matchedParent = data.parents.find((p) => {
+    const pDigits = (p.phone || '').replace(/\D/g, '');
+    const isPhoneMatch =
+      digits.length >= 8 &&
+      pDigits.length >= 8 &&
+      (pDigits === digits || pDigits.endsWith(digits) || digits.endsWith(pDigits));
+    const isEmailMatch = p.email && p.email.toLowerCase().trim() === normalized;
+    return isPhoneMatch || isEmailMatch;
+  });
+
+  if (matchedParent) {
+    return {
+      role: 'parent',
+      matchedType: 'parent',
+      matchedParent,
+      displayName: matchedParent.fullName,
+      targetTenantId: matchedParent.tenant_id,
+      label: `👨‍👩‍👧 Phụ huynh: ${matchedParent.fullName}`,
+      badgeClass: 'bg-purple-50 text-purple-900 border-purple-200',
+    };
+  }
+
+  // 3b. Parent (from student.parentPhone / parentEmail)
+  const studentWithParentContact = data.students.find((s) => {
+    const pDigits = (s.parentPhone || '').replace(/\D/g, '');
+    const isPhoneMatch =
+      digits.length >= 8 &&
+      pDigits.length >= 8 &&
+      (pDigits === digits || pDigits.endsWith(digits) || digits.endsWith(pDigits));
+    const isEmailMatch = s.parentEmail && s.parentEmail.toLowerCase().trim() === normalized;
+    return isPhoneMatch || isEmailMatch;
+  });
+
+  if (studentWithParentContact) {
+    const pName = studentWithParentContact.parentName || `PH em ${studentWithParentContact.fullName}`;
+    return {
+      role: 'parent',
+      matchedType: 'parent',
+      matchedStudent: studentWithParentContact,
+      displayName: pName,
+      targetTenantId: studentWithParentContact.tenant_id,
+      label: `👨‍👩‍👧 Phụ huynh: ${pName} (PH em ${studentWithParentContact.fullName})`,
+      badgeClass: 'bg-purple-50 text-purple-900 border-purple-200',
+    };
+  }
+
+  // 4. Teacher / Tenant (by phone, email, or tenant id)
+  const matchedTenant = data.tenants.find((t) => {
+    const isEmailMatch = t.email && t.email.toLowerCase().trim() === normalized;
+    const tDigits = (t.phone || '').replace(/\D/g, '');
+    const isPhoneMatch =
+      digits.length >= 8 &&
+      tDigits.length >= 8 &&
+      (tDigits === digits || tDigits.endsWith(digits) || digits.endsWith(tDigits));
+    const isIdMatch = t.id && t.id.toLowerCase() === normalized;
+    return isEmailMatch || isPhoneMatch || isIdMatch;
+  });
+
+  if (matchedTenant) {
+    return {
+      role: 'teacher',
+      matchedType: 'teacher',
+      matchedTenant,
+      displayName: matchedTenant.teacherName || matchedTenant.name,
+      targetTenantId: matchedTenant.id,
+      label: `👨‍🏫 Giáo viên: ${matchedTenant.teacherName || matchedTenant.name}`,
+      badgeClass: 'bg-blue-50 text-blue-900 border-blue-200',
+    };
+  }
+
+  // 5. Account Invitations (by phone or email)
+  if (data.accountInvitations && data.accountInvitations.length > 0) {
+    const matchedInvite = data.accountInvitations.find((inv) => {
+      const invDigits = (inv.phone || '').replace(/\D/g, '');
+      const isPhoneMatch =
+        digits.length >= 8 &&
+        invDigits.length >= 8 &&
+        (invDigits === digits || invDigits.endsWith(digits) || digits.endsWith(invDigits));
+      const isEmailMatch = inv.email && inv.email.toLowerCase().trim() === normalized;
+      return isPhoneMatch || isEmailMatch;
+    });
+
+    if (matchedInvite) {
+      const isStudent = matchedInvite.type === 'student';
+      return {
+        role: isStudent ? 'student' : 'parent',
+        matchedType: isStudent ? 'student' : 'parent',
+        displayName: isStudent ? 'Học sinh' : 'Phụ huynh',
+        targetTenantId: matchedInvite.tenant_id,
+        label: isStudent ? '🎒 Học sinh (Theo mã kích hoạt)' : '👨‍👩‍👧 Phụ huynh (Theo mã kích hoạt)',
+        badgeClass: isStudent
+          ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+          : 'bg-purple-50 text-purple-900 border-purple-200',
+      };
+    }
+  }
+
+  // 6. Common teacher email shortcuts or domains
+  if (
+    normalized === 'thaytuan.math@edututor.vn' ||
+    normalized === 'tonga190984@gmail.com' ||
+    normalized.startsWith('teacher.') ||
+    normalized.includes('@teacher.')
+  ) {
+    return {
+      role: 'teacher',
+      matchedType: 'teacher',
+      displayName: normalized.split('@')[0],
+      targetTenantId: data.defaultTenantId,
+      label: '👨‍🏫 Giáo viên',
+      badgeClass: 'bg-blue-50 text-blue-900 border-blue-200',
+    };
+  }
+
+  // 7. Student/Parent email heuristics
+  if (normalized.includes('@student.')) {
+    return {
+      role: 'student',
+      matchedType: 'student',
+      displayName: normalized.split('@')[0],
+      targetTenantId: data.defaultTenantId,
+      label: '🎒 Học sinh',
+      badgeClass: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+    };
+  }
+
+  if (normalized.includes('@parent.')) {
+    return {
+      role: 'parent',
+      matchedType: 'parent',
+      displayName: normalized.split('@')[0],
+      targetTenantId: data.defaultTenantId,
+      label: '👨‍👩‍👧 Phụ huynh',
+      badgeClass: 'bg-purple-50 text-purple-900 border-purple-200',
+    };
+  }
+
+  // 8. If email format, default to teacher (for newly registered teacher / center)
+  if (normalized.includes('@')) {
+    return {
+      role: 'teacher',
+      matchedType: 'teacher',
+      displayName: normalized.split('@')[0],
+      targetTenantId: data.defaultTenantId,
+      label: '👨‍🏫 Giáo viên / Trung tâm',
+      badgeClass: 'bg-blue-50 text-blue-900 border-blue-200',
+    };
+  }
+
+  return null;
+}
+
 interface LoginPageProps {
   onOpenActivationModal?: (token: string) => void;
 }
@@ -61,6 +284,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
     students,
     parents,
     parentStudents,
+    accountInvitations,
     setActiveStudentId,
     tenants,
   } = useApp();
@@ -72,10 +296,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginRole, setLoginRole] = useState<UserRole>('teacher');
   const [rememberAccount, setRememberAccount] = useState(false);
   const [savedIdentifier, setSavedIdentifier] = useState<string | null>(null);
   const [showForgotPasswordHelp, setShowForgotPasswordHelp] = useState(false);
+
+  // Auto-detect role and user identity in real-time
+  const detectedAccount = React.useMemo(() => {
+    return resolveAccount(loginEmail, {
+      students,
+      parents,
+      tenants,
+      accountInvitations,
+      defaultTenantId: currentTenant.id,
+    });
+  }, [loginEmail, students, parents, tenants, accountInvitations, currentTenant.id]);
 
   // Register form state
   const [regName, setRegName] = useState('');
@@ -109,9 +343,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
           setSavedIdentifier(parsed.identifier);
           setLoginEmail(parsed.identifier);
           setRememberAccount(true);
-          if (parsed.role) {
-            setLoginRole(parsed.role);
-          }
         }
       }
     } catch (err) {
@@ -190,15 +421,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
     const normalizedInput = rawInput.toLowerCase();
     const phoneDigits = rawInput.replace(/\D/g, '');
 
-    // 1. Identify if this is an Admin account
-    const isAdminAccount =
-      normalizedInput === 'tuannmit09@gmail.com' ||
-      normalizedInput === 'tuannmit09@uranustech.vn' ||
-      normalizedInput.includes('admin') ||
-      loginRole === 'admin';
+    // Resolve user account and role automatically
+    const resolved = resolveAccount(rawInput, {
+      students,
+      parents,
+      tenants,
+      accountInvitations,
+      defaultTenantId: currentTenant.id,
+    });
 
-    // 2. Identify if this matches a Student in data
-    const matchedStudent = students.find((s) => {
+    const isAdminAccount = resolved?.role === 'admin';
+
+    const matchedStudent = resolved?.matchedStudent || students.find((s) => {
       const sPhoneDigits = (s.phone || '').replace(/\D/g, '');
       const isPhoneMatch = phoneDigits.length >= 8 && sPhoneDigits.length >= 8 && (sPhoneDigits === phoneDigits || sPhoneDigits.endsWith(phoneDigits) || phoneDigits.endsWith(sPhoneDigits));
       const isEmailMatch = s.email && s.email.toLowerCase().trim() === normalizedInput;
@@ -206,26 +440,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
       return isPhoneMatch || isEmailMatch || isCodeMatch;
     });
 
-    // 3. Identify if this matches a Parent in data
-    const matchedParent = parents.find((p) => {
+    const matchedParent = resolved?.matchedParent || parents.find((p) => {
       const pPhoneDigits = (p.phone || '').replace(/\D/g, '');
       const isPhoneMatch = phoneDigits.length >= 8 && pPhoneDigits.length >= 8 && (pPhoneDigits === phoneDigits || pPhoneDigits.endsWith(phoneDigits) || phoneDigits.endsWith(pPhoneDigits));
       const isEmailMatch = p.email && p.email.toLowerCase().trim() === normalizedInput;
       return isPhoneMatch || isEmailMatch;
     });
 
-    // 4. Identify if this matches a Teacher / Tenant in data
-    const matchedTenant = tenants.find((t) => {
+    const matchedTenant = resolved?.matchedTenant || tenants.find((t) => {
       const isEmailMatch = t.email && t.email.toLowerCase().trim() === normalizedInput;
       const tPhoneDigits = (t.phone || '').replace(/\D/g, '');
       const isPhoneMatch = phoneDigits.length >= 8 && tPhoneDigits.length >= 8 && (tPhoneDigits === phoneDigits || tPhoneDigits.endsWith(phoneDigits) || phoneDigits.endsWith(tPhoneDigits));
       return isEmailMatch || isPhoneMatch;
     });
 
-    // Determine effective role & name
-    let effectiveRole: UserRole = loginRole;
-    let effectiveName = rawInput;
-    let targetTenantId = currentTenant.id;
+    // Effective role is strictly derived from account data
+    let effectiveRole: UserRole = resolved?.role || 'teacher';
+    let effectiveName = resolved?.displayName || rawInput;
+    let targetTenantId = resolved?.targetTenantId || currentTenant.id;
 
     if (isAdminAccount) {
       effectiveRole = 'admin';
@@ -242,15 +474,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
       effectiveRole = 'teacher';
       effectiveName = matchedTenant.teacherName || 'Giáo viên';
       targetTenantId = matchedTenant.id;
-    } else if (loginRole === 'student') {
-      effectiveRole = 'student';
-      effectiveName = rawInput.includes('@') ? rawInput.split('@')[0] : `Học sinh ${rawInput}`;
-    } else if (loginRole === 'parent') {
-      effectiveRole = 'parent';
-      effectiveName = rawInput.includes('@') ? rawInput.split('@')[0] : `Phụ huynh ${rawInput}`;
-    } else {
-      effectiveRole = loginRole;
-      effectiveName = rawInput.includes('@') ? rawInput.split('@')[0] : 'Giáo viên';
+    } else if (resolved) {
+      effectiveRole = resolved.role;
+      effectiveName = resolved.displayName;
+    } else if (rawInput.includes('@')) {
+      effectiveRole = 'teacher';
+      effectiveName = rawInput.split('@')[0];
+    }
+
+    // If input is phone number and not found anywhere in system
+    if (!resolved && !rawInput.includes('@')) {
+      setErrorMsg(
+        'Số điện thoại này chưa được đăng ký trong hệ thống. Vui lòng kiểm tra lại hoặc liên hệ Giáo viên để nhận liên kết kích hoạt tài khoản.'
+      );
+      setLoading(false);
+      return;
     }
 
     // Check stored custom credentials (from memory & Cloud Firestore)
@@ -268,7 +506,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
       isAdminAccount ||
       !!matchedStudent ||
       !!matchedParent ||
-      !!matchedTenant;
+      !!matchedTenant ||
+      !!resolved;
 
     if (hasCustomPassword || isKnownSystemAccount) {
       const expectedPassword = hasCustomPassword || '123456';
@@ -316,6 +555,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
             setActiveStudentId(primary.student_id);
             try { sessionStorage.setItem('edututor_active_student_id', primary.student_id); } catch {}
           }
+        } else if (resolved?.matchedStudent) {
+          // Linked via student.parentPhone
+          setActiveStudentId(resolved.matchedStudent.id);
+          try { sessionStorage.setItem('edututor_active_student_id', resolved.matchedStudent.id); } catch {}
         }
 
         await saveOrClearRememberedAccount(rawInput, effectiveRole);
@@ -676,38 +919,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
               )}
 
               <form onSubmit={handleEmailLogin} className="space-y-4">
-                {/* Role Selector Segmented Control */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    1. Chọn vai trò đăng nhập
-                  </label>
-                  <div className="grid grid-cols-4 gap-1.5 bg-slate-100/80 p-1 rounded-2xl border border-slate-200/70">
-                    {[
-                      { id: 'admin', label: '👑 Admin' },
-                      { id: 'teacher', label: '👨‍🏫 Giáo viên' },
-                      { id: 'parent', label: '👨‍👩‍👧 Phụ huynh' },
-                      { id: 'student', label: '🎒 Học sinh' },
-                    ].map((r) => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => setLoginRole(r.id as UserRole)}
-                        className={`py-2 px-1 text-xs font-bold rounded-xl transition-all cursor-pointer truncate ${
-                          loginRole === r.id
-                            ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Identifier Input (Phone or Email) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    2. Số điện thoại hoặc Email tài khoản
+                    Số điện thoại hoặc Email tài khoản
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
@@ -720,15 +935,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                       className="w-full pl-10 pr-3.5 py-2.5 text-base lg:text-xs bg-slate-50/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all font-medium"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    * Học sinh & Phụ huynh có thể đăng nhập bằng <strong>Số điện thoại</strong> đã đăng ký/kích hoạt.
-                  </p>
+
+                  {/* Auto-detected Account Badge or Intelligent Helper */}
+                  {detectedAccount ? (
+                    <div className={`mt-2 p-2.5 rounded-xl border flex items-center justify-between text-xs animate-in fade-in ${detectedAccount.badgeClass}`}>
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div>
+                          <span className="font-medium text-[11px] block opacity-80">Tự động nhận diện tài khoản:</span>
+                          <span className="font-bold text-xs">{detectedAccount.label}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-white/80 shadow-2xs shrink-0">
+                        {detectedAccount.role}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 mt-1.5 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-blue-500 shrink-0" />
+                      <span>Hệ thống tự động nhận diện vai trò (Admin, Giáo viên, Phụ huynh, Học sinh) theo số điện thoại/email của bạn.</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Password Input */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    3. Mật khẩu
+                    Mật khẩu
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
@@ -743,7 +976,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenActivationModal }) =
                   </div>
                 </div>
 
-                {/* 4. Remember Account Checkbox & Clear Option */}
+                {/* Remember Account Checkbox & Clear Option */}
                 <div className="flex items-center justify-between pt-0.5 pb-0.5">
                   <label
                     htmlFor="remember-account-checkbox"

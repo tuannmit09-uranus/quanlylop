@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { formatVND } from '../../utils/vietqr';
 import { NavTabId } from '../layout/Sidebar';
 import capBooks3dImg from '../../assets/images/cap_books_3d_transparent.png';
+import { TuitionRevenueChart } from './TuitionRevenueChart';
 import {
   Users,
   CreditCard,
@@ -290,6 +291,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Recharts Bar Chart: Monthly Tuition Revenue Trends (Current Fiscal Year) */}
+      <TuitionRevenueChart
+        tuitionItems={tuitionItems}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        onSelectMonth={(m) => setSelectedMonth(m)}
+        onSelectYear={(y) => setSelectedYear(y)}
+        onNavigateToTuition={(m, y) => onNavigate('tuition', { month: m, year: y })}
+      />
 
       {/* Main Two Columns: Unpaid Tuition Alert Table + Class Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
