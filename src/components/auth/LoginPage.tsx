@@ -74,6 +74,11 @@ export function resolveAccount(
   const normalized = raw.toLowerCase();
   const digits = raw.replace(/\D/g, '');
 
+  const studentsList = Array.isArray(data?.students) ? data.students : [];
+  const parentsList = Array.isArray(data?.parents) ? data.parents : [];
+  const tenantsList = Array.isArray(data?.tenants) ? data.tenants : [];
+  const invitationsList = Array.isArray(data?.accountInvitations) ? data.accountInvitations : [];
+
   // 1. Admin
   if (
     normalized === 'tuannmit09@gmail.com' ||
@@ -85,14 +90,15 @@ export function resolveAccount(
       role: 'admin',
       matchedType: 'admin',
       displayName: 'Quản Trị Viên (Tuấn Admin)',
-      targetTenantId: data.defaultTenantId,
+      targetTenantId: data?.defaultTenantId,
       label: '👑 Quản Trị Viên (Admin)',
       badgeClass: 'bg-amber-50 text-amber-900 border-amber-200',
     };
   }
 
   // 2. Student (by phone, email, schoolCode, or ID)
-  const matchedStudent = data.students.find((s) => {
+  const matchedStudent = studentsList.find((s) => {
+    if (!s) return false;
     const sDigits = (s.phone || '').replace(/\D/g, '');
     const isPhoneMatch =
       digits.length >= 8 &&
@@ -118,7 +124,8 @@ export function resolveAccount(
   }
 
   // 3. Parent (from parents collection)
-  const matchedParent = data.parents.find((p) => {
+  const matchedParent = parentsList.find((p) => {
+    if (!p) return false;
     const pDigits = (p.phone || '').replace(/\D/g, '');
     const isPhoneMatch =
       digits.length >= 8 &&
@@ -141,7 +148,8 @@ export function resolveAccount(
   }
 
   // 3b. Parent (from student.parentPhone / parentEmail)
-  const studentWithParentContact = data.students.find((s) => {
+  const studentWithParentContact = studentsList.find((s) => {
+    if (!s) return false;
     const pDigits = (s.parentPhone || '').replace(/\D/g, '');
     const isPhoneMatch =
       digits.length >= 8 &&
@@ -165,7 +173,8 @@ export function resolveAccount(
   }
 
   // 4. Teacher / Tenant (by phone, email, or tenant id)
-  const matchedTenant = data.tenants.find((t) => {
+  const matchedTenant = tenantsList.find((t) => {
+    if (!t) return false;
     const isEmailMatch = t.email && t.email.toLowerCase().trim() === normalized;
     const tDigits = (t.phone || '').replace(/\D/g, '');
     const isPhoneMatch =
@@ -189,8 +198,9 @@ export function resolveAccount(
   }
 
   // 5. Account Invitations (by phone or email)
-  if (data.accountInvitations && data.accountInvitations.length > 0) {
-    const matchedInvite = data.accountInvitations.find((inv) => {
+  if (invitationsList.length > 0) {
+    const matchedInvite = invitationsList.find((inv) => {
+      if (!inv) return false;
       const invDigits = (inv.phone || '').replace(/\D/g, '');
       const isPhoneMatch =
         digits.length >= 8 &&

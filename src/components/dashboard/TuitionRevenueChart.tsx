@@ -349,8 +349,8 @@ export const TuitionRevenueChart: React.FC<TuitionRevenueChartProps> = ({
       </div>
 
       {/* Recharts Bar Chart Container */}
-      <div className="w-full h-[320px] sm:h-[350px] relative">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="w-full h-[320px] sm:h-[350px] relative min-w-0">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={280}>
           <BarChart
             data={monthlyData}
             margin={{ top: 15, right: 15, left: 0, bottom: 5 }}

@@ -577,18 +577,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let classNeedsUpdate = false;
     const healedClasses = classes.map((cls) => {
-      // Valid students are those that exist AND (if they have enrolledClassIds, must include this class)
+      // Valid students are those that exist AND match tenant AND (if they have enrolledClassIds, must include this class)
       const validStudentIds = cls.studentIds.filter((sId) => {
         const student = students.find((s) => s.id === sId);
         if (!student) return false;
+        // Strict tenant isolation: Student must belong to the same tenant as the class!
+        if (student.tenant_id && cls.tenant_id && student.tenant_id !== cls.tenant_id) {
+          return false;
+        }
         if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0) {
           return student.enrolledClassIds.includes(cls.id);
         }
         return true;
       });
 
-      // Also ensure any student who has this class in enrolledClassIds is included
+      // Also ensure any student who has this class in enrolledClassIds is included (matching tenant)
       students.forEach((student) => {
+        if (student.tenant_id && cls.tenant_id && student.tenant_id !== cls.tenant_id) {
+          return;
+        }
         if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.includes(cls.id)) {
           if (!validStudentIds.includes(student.id)) {
             validStudentIds.push(student.id);
@@ -656,6 +663,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [recurringSchedules, lessonSessions]);
 
   // Automatically calculate tuition reactively when attendance, sessions, classes or students change
+  // STRICT TENANT ISOLATION: A tuition item ALWAYS belongs to the class's tenant_id, NEVER the globally active currentTenant.id
   useEffect(() => {
     // Find all distinct month-year periods from lessonSessions
     const periods = new Map<string, { month: number; year: number }>();
@@ -678,10 +686,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       periods.forEach(({ month, year }) => {
         classes.forEach((cls) => {
           if (cls.status !== 'active') return;
+          const classTenantId = cls.tenant_id;
+          if (!classTenantId) return;
 
           cls.studentIds.forEach((studentId) => {
             const student = students.find((s) => s.id === studentId);
             if (!student) return;
+            // Strict tenant isolation: Student must belong to the class's tenant
+            if (student.tenant_id && student.tenant_id !== classTenantId) return;
+
             if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0 && !student.enrolledClassIds.includes(cls.id)) {
               return;
             }
@@ -689,13 +702,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Find sessions of this class in this month/year with feeEligible === true where student is 'present'
             const studentPresentSessions = lessonSessions.filter((s) => {
               if (s.classId !== cls.id) return false;
+              if (s.tenant_id && s.tenant_id !== classTenantId) return false;
               if (!s.feeEligible) return false;
               if (s.status === 'cancelled') return false; // Exclude cancelled sessions
               const [sYear, sMonth] = s.date.split('-').map(Number);
               if (sYear !== year || sMonth !== month) return false;
 
               const attRecord = attendance.find(
-                (a) => a.sessionId === s.id && a.studentId === studentId
+                (a) => a.sessionId === s.id && a.studentId === studentId && (!a.tenant_id || a.tenant_id === classTenantId)
               );
               return attRecord?.status === 'present';
             });
@@ -711,11 +725,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               month,
               year,
               student.id,
-              students
+              students.filter((st) => !st.tenant_id || st.tenant_id === classTenantId)
             );
 
+            // Match strictly by classTenantId, student, class, period
             const existingIdx = currentTuitions.findIndex(
               (t) =>
+                t.tenant_id === classTenantId &&
                 t.periodMonth === month &&
                 t.periodYear === year &&
                 t.studentId === studentId &&
@@ -729,6 +745,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const hasSessionIdsChanged = JSON.stringify(existing.eligibleSessionIds) !== JSON.stringify(studentSessionIds);
               if (
                 existing.id !== expectedId ||
+                existing.tenant_id !== classTenantId ||
                 existing.sessionCount !== studentSessionCount ||
                 existing.totalAmount !== totalAmount ||
                 existing.paymentReference !== paymentReference ||
@@ -738,6 +755,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 currentTuitions[existingIdx] = {
                   ...existing,
                   id: expectedId,
+                  tenant_id: classTenantId,
                   eligibleSessionIds: studentSessionIds,
                   sessionCount: studentSessionCount,
                   totalAmount,
@@ -747,11 +765,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 };
               }
             } else {
-              // Create new tuition item
+              // Create new tuition item - ALWAYS WITH classTenantId! NEVER with currentTenant.id!
               isChanged = true;
               currentTuitions.push({
                 id: `tui-${studentId}-${cls.id}-${month}${year}`,
-                tenant_id: currentTenant.id,
+                tenant_id: classTenantId,
                 periodMonth: month,
                 periodYear: year,
                 studentId,
@@ -775,12 +793,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       });
 
+      // Healing Pass: If any tuition item in memory has a tenant_id that contradicts its class's tenant_id, fix it
+      const classMap = new Map(classes.map((c) => [c.id, c.tenant_id]));
+      currentTuitions.forEach((t, idx) => {
+        const correctTenant = classMap.get(t.classId);
+        if (correctTenant && t.tenant_id !== correctTenant) {
+          isChanged = true;
+          currentTuitions[idx] = { ...t, tenant_id: correctTenant };
+        }
+      });
+
       if (isChanged) {
         return currentTuitions;
       }
       return prev;
     });
-  }, [attendance, lessonSessions, classes, students, currentTenant.id]);
+  }, [attendance, lessonSessions, classes, students]);
 
   const addAuditLog = (
     action: AuditLog['action'],
@@ -2853,9 +2881,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Tuition Calculation & Lock
   const calculateMonthlyTuition = (month: number, year: number, classFilterId?: string) => {
+    // Strictly filter classes belonging to the current tenant
     const targetClasses = classFilterId
-      ? classes.filter((c) => c.id === classFilterId && (c.tenant_id === currentTenant.id || !c.tenant_id))
-      : classes.filter((c) => c.status === 'active' && (c.tenant_id === currentTenant.id || !c.tenant_id));
+      ? classes.filter((c) => c.id === classFilterId && c.tenant_id === currentTenant.id)
+      : classes.filter((c) => c.status === 'active' && c.tenant_id === currentTenant.id);
 
     const generatedItems: TuitionItem[] = [];
 
@@ -2864,6 +2893,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cls.studentIds.forEach((studentId) => {
         const student = students.find((s) => s.id === studentId);
         if (!student) return;
+        // Strictly ignore if student belongs to another tenant
+        if (student.tenant_id && student.tenant_id !== currentTenant.id) return;
+
         if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0 && !student.enrolledClassIds.includes(cls.id)) {
           return;
         }
@@ -2871,13 +2903,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Find sessions of this class in this month/year with feeEligible === true where student is marked 'present'
         const studentPresentSessions = lessonSessions.filter((s) => {
           if (s.classId !== cls.id) return false;
+          if (s.tenant_id && s.tenant_id !== currentTenant.id) return false;
           if (!s.feeEligible) return false;
           if (s.status === 'cancelled') return false;
           const [sYear, sMonth] = s.date.split('-').map(Number);
           if (sYear !== year || sMonth !== month) return false;
 
           const attRecord = attendance.find(
-            (a) => a.sessionId === s.id && a.studentId === studentId
+            (a) => a.sessionId === s.id && a.studentId === studentId && (!a.tenant_id || a.tenant_id === currentTenant.id)
           );
           return attRecord?.status === 'present';
         });
@@ -2894,14 +2927,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           month,
           year,
           student.id,
-          students
+          students.filter((st) => !st.tenant_id || st.tenant_id === currentTenant.id)
         );
 
-        const targetTenantId = student.tenant_id || cls.tenant_id || currentTenant.id;
+        const targetTenantId = cls.tenant_id || currentTenant.id;
 
-        // Check if existing
+        // Check if existing strictly within this tenant
         const existing = tuitionItems.find(
           (t) =>
+            t.tenant_id === currentTenant.id &&
             t.periodMonth === month &&
             t.periodYear === year &&
             t.studentId === studentId &&
@@ -2946,10 +2980,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setTuitionItems((prev) => {
-      // Merge
+      // Merge only for targetClasses and strictly within currentTenant.id
       const remaining = prev.filter(
         (t) =>
           !(
+            t.tenant_id === currentTenant.id &&
             t.periodMonth === month &&
             t.periodYear === year &&
             targetClasses.some((c) => c.id === t.classId)
@@ -2973,7 +3008,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nowStr = new Date().toISOString().split('T')[0];
     setTuitionItems((prev) =>
       prev.map((t) => {
-        if (t.periodMonth === month && t.periodYear === year && t.status === 'draft') {
+        if (t.tenant_id === currentTenant.id && t.periodMonth === month && t.periodYear === year && t.status === 'draft') {
           const lockedItem: TuitionItem = {
             ...t,
             status: 'unpaid',
@@ -3018,7 +3053,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ) => {
     setTuitionItems((prev) =>
       prev.map((t) => {
-        if (t.id === tuitionId) {
+        if (t.id === tuitionId && t.tenant_id === currentTenant.id) {
           const sessionCount = sessionIds.length;
           const totalAmount = sessionCount * t.feePerSession;
           const updatedItem = {
@@ -3051,7 +3086,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ) => {
     setTuitionItems((prev) =>
       prev.map((t) => {
-        if (t.id === id) {
+        if (t.id === id && t.tenant_id === currentTenant.id) {
           const updatedItem: TuitionItem = {
             ...t,
             status,
@@ -3142,9 +3177,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearBankTransactionsForMonth = (month: number, year: number) => {
-    // Unlink any matched tuitions for this month
+    // Unlink any matched tuitions for this month strictly within currentTenant
     const txnsInMonth = bankTransactions.filter(
-      (tx) => tx.statementMonth === month && tx.statementYear === year
+      (tx) => tx.tenant_id === currentTenant.id && tx.statementMonth === month && tx.statementYear === year
     );
 
     const matchedTuitionIds = txnsInMonth
@@ -3154,7 +3189,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (matchedTuitionIds.length > 0) {
       setTuitionItems((prev) =>
         prev.map((t) => {
-          if (matchedTuitionIds.includes(t.id)) {
+          if (t.tenant_id === currentTenant.id && matchedTuitionIds.includes(t.id)) {
             const updatedT = { ...t, status: 'unpaid' as const, paidAmount: 0, bankTransactionId: undefined, paidAt: undefined };
             syncSaveToFirestore('tuitions', t.id, updatedT);
             return updatedT;
@@ -3165,13 +3200,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     txnsInMonth.forEach((tx) => syncDeleteFromFirestore('bankTransactions', tx.id));
-    bankStatements.filter((s) => s.month === month && s.year === year).forEach((s) => syncDeleteFromFirestore('bankStatements', s.id));
+    bankStatements.filter((s) => s.tenant_id === currentTenant.id && s.month === month && s.year === year).forEach((s) => syncDeleteFromFirestore('bankStatements', s.id));
 
     setBankTransactions((prev) =>
-      prev.filter((tx) => !(tx.statementMonth === month && tx.statementYear === year))
+      prev.filter((tx) => !(tx.tenant_id === currentTenant.id && tx.statementMonth === month && tx.statementYear === year))
     );
     setBankStatements((prev) =>
-      prev.filter((s) => !(s.month === month && s.year === year))
+      prev.filter((s) => !(s.tenant_id === currentTenant.id && s.month === month && s.year === year))
     );
 
     addAuditLog(
@@ -3194,8 +3229,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const unassignedTxns = bankTransactions.filter(
       (tx) =>
-        (tx.statementMonth === targetMonth && tx.statementYear === targetYear) ||
-        (!tx.statementMonth && !month)
+        tx.tenant_id === currentTenant.id &&
+        ((tx.statementMonth === targetMonth && tx.statementYear === targetYear) ||
+        (!tx.statementMonth && !month))
     );
 
     const updatedTuitions = [...tuitionItems];
@@ -3208,8 +3244,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cleanDesc = rawDesc.toUpperCase();
       const unaccentedDesc = removeVietnameseAccents(rawDesc).toLowerCase();
 
-      // Strategy 1: Find matching tuition by payment reference (e.g. PBC_K10_Tuan_T7_2026 or PBC_K10_Tuan)
+      // Strategy 1: Find matching tuition by payment reference (strictly currentTenant)
       let matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
+        if (tui.tenant_id !== currentTenant.id) return false;
         if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
         const ref = tui.paymentReference.toUpperCase();
         if (cleanDesc.includes(ref)) return true;
@@ -3221,11 +3258,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return false;
       });
 
-      // Strategy 2: Match by Student unaccented full name (e.g. "tran anh tuan" in memo)
+      // Strategy 2: Match by Student unaccented full name (strictly currentTenant)
       if (matchedTuitionIndex < 0) {
         matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
+          if (tui.tenant_id !== currentTenant.id) return false;
           if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-          const student = students.find((s) => s.id === tui.studentId);
+          const student = students.find((s) => s.id === tui.studentId && (!s.tenant_id || s.tenant_id === currentTenant.id));
           if (!student) return false;
 
           const unaccentedStudentName = removeVietnameseAccents(student.fullName).toLowerCase();
@@ -3236,11 +3274,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // Strategy 3: Match by Parent unaccented name (e.g. "le thi hong hanh" or "nguyen thi hoan")
+      // Strategy 3: Match by Parent unaccented name (strictly currentTenant)
       if (matchedTuitionIndex < 0) {
         matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
+          if (tui.tenant_id !== currentTenant.id) return false;
           if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-          const student = students.find((s) => s.id === tui.studentId);
+          const student = students.find((s) => s.id === tui.studentId && (!s.tenant_id || s.tenant_id === currentTenant.id));
           if (!student || !student.parentName) return false;
 
           const unaccentedParentName = removeVietnameseAccents(student.parentName).toLowerCase();
@@ -3251,11 +3290,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // Strategy 4: Match by Parent or Student phone number in memo (e.g. "0988123456" in memo)
+      // Strategy 4: Match by Parent or Student phone number in memo (strictly currentTenant)
       if (matchedTuitionIndex < 0) {
         matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
+          if (tui.tenant_id !== currentTenant.id) return false;
           if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-          const student = students.find((s) => s.id === tui.studentId);
+          const student = students.find((s) => s.id === tui.studentId && (!s.tenant_id || s.tenant_id === currentTenant.id));
           if (!student) return false;
 
           const parentDigits = (student.parentPhone || '').replace(/\D/g, '');
@@ -3774,7 +3814,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const tenantHomeworks = homeworks.filter((h) => h.tenant_id === currentTenant.id);
   const tenantSubmissions = submissions.filter((s) => s.tenant_id === currentTenant.id);
   const tenantComments = comments.filter((c) => c.tenant_id === currentTenant.id);
-  const tenantTuitionItems = tuitionItems.filter((t) => t.tenant_id === currentTenant.id);
+  const tenantClassIdSet = new Set(tenantClasses.map((c) => c.id));
+  const tenantTuitionItems = tuitionItems.filter((t) => {
+    if (t.tenant_id !== currentTenant.id) return false;
+    // Strong isolation guard: If classes exist for this tenant, ensure tuition item belongs to one of its classes
+    if (tenantClassIdSet.size > 0 && t.classId && !tenantClassIdSet.has(t.classId)) return false;
+    return true;
+  });
   const tenantBankStatements = bankStatements.filter((bs) => bs.tenant_id === currentTenant.id);
   const tenantBankTransactions = bankTransactions.filter((bt) => bt.tenant_id === currentTenant.id);
   const tenantNotifications = notifications.filter((n) => n.tenant_id === currentTenant.id || !n.tenant_id);

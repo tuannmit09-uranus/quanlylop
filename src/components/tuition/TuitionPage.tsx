@@ -41,6 +41,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
     paymentAccount,
     schools,
     classes,
+    currentTenant,
   } = useApp();
 
   const currentDate = new Date();
@@ -83,7 +84,12 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   const [selectedTuitionForQR, setSelectedTuitionForQR] = useState<TuitionItem | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
 
+  const currentTenantClassIds = new Set(classes.map((c) => c.id));
   const filteredTuitions = tuitionItems.filter((t) => {
+    // Defense-in-depth: Ensure strict tenant and class isolation
+    if (t.tenant_id && currentTenant?.id && t.tenant_id !== currentTenant.id) return false;
+    if (currentTenantClassIds.size > 0 && t.classId && !currentTenantClassIds.has(t.classId)) return false;
+
     const matchesMonth = t.periodMonth === selectedMonth && t.periodYear === selectedYear;
     const matchesSchool = selectedSchool === 'ALL' || t.schoolCode === selectedSchool;
     const matchesClass = selectedClassId === 'ALL' || t.classId === selectedClassId;
