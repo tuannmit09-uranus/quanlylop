@@ -420,10 +420,10 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
                     <tr>
                       <th className="py-2.5 px-3">STT</th>
                       <th className="py-2.5 px-3">Họ và tên</th>
-                      <th className="py-2.5 px-3">SĐT HS</th>
+                      <th className="py-2.5 px-3">SĐT & Email HS</th>
                       <th className="py-2.5 px-3">Trường / Lớp trường</th>
                       <th className="py-2.5 px-3">Lớp dạy thêm gán vào</th>
-                      <th className="py-2.5 px-3">Phụ huynh & SĐT</th>
+                      <th className="py-2.5 px-3">Phụ huynh & Liên hệ</th>
                       <th className="py-2.5 px-3 text-center">Xóa</th>
                     </tr>
                   </thead>
@@ -443,8 +443,15 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
                             <span className="font-bold text-slate-900 block">{r.fullName}</span>
                             <span className="text-[10px] text-slate-400 font-mono">DOB: {r.dob}</span>
                           </td>
-                          <td className="py-2 px-3 text-slate-600 font-mono text-[11px]">
-                            {r.phone || <span className="text-slate-300 italic">Trống</span>}
+                          <td className="py-2 px-3">
+                            <div className="text-slate-700 font-mono text-[11px]">
+                              {r.phone || <span className="text-slate-300 italic">Trống SĐT</span>}
+                            </div>
+                            {r.email && (
+                              <div className="text-[10px] text-blue-600 font-mono truncate max-w-[150px]" title={r.email}>
+                                ✉ {r.email}
+                              </div>
+                            )}
                           </td>
                           <td className="py-2 px-3">
                             {r.schoolName || r.schoolCode ? (
@@ -475,12 +482,19 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
                             </div>
                           </td>
                           <td className="py-2 px-3">
-                            {r.parentName ? (
+                            {r.parentName || r.parentPhone || r.parentEmail ? (
                               <>
-                                <span className="text-slate-800 block font-semibold">{r.parentName}</span>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                  {r.parentPhone || <span className="italic text-slate-300">Không có SĐT</span>}
-                                </span>
+                                {r.parentName && <span className="text-slate-800 block font-semibold">{r.parentName}</span>}
+                                {r.parentPhone && (
+                                  <span className="text-[10px] text-slate-500 font-mono block">
+                                    {r.parentPhone}
+                                  </span>
+                                )}
+                                {r.parentEmail && (
+                                  <span className="text-[10px] text-slate-400 font-mono block truncate max-w-[150px]" title={r.parentEmail}>
+                                    ✉ {r.parentEmail}
+                                  </span>
+                                )}
                               </>
                             ) : (
                               <span className="text-slate-400 italic text-[11px]">Để trống</span>

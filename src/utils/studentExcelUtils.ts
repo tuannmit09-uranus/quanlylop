@@ -25,6 +25,8 @@ export interface ParsedStudentRow {
 function normalizeHeader(str: string): string {
   return str
     .toLowerCase()
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]/g, '')
@@ -187,51 +189,205 @@ export async function parseStudentExcelFile(
 
     // Determine header row index
     let headerRowIdx = -1;
-    let colMap: Record<string, number> = {};
+    let colMap: {
+      name?: number;
+      lastName?: number;
+      firstName?: number;
+      dob?: number;
+      phone?: number;
+      email?: number;
+      school?: number;
+      grade?: number;
+      classRoom?: number;
+      parentName?: number;
+      parentPhone?: number;
+      parentEmail?: number;
+      notes?: number;
+    } = {};
 
-    for (let r = 0; r < Math.min(rawData.length, 10); r++) {
+    for (let r = 0; r < Math.min(rawData.length, 12); r++) {
       const row = rawData[r];
       if (!Array.isArray(row)) continue;
 
       const normalizedCells = row.map((cell) => normalizeHeader(String(cell || '')));
-      
-      const foundName = normalizedCells.findIndex((c) =>
-        ['hovaten', 'hovatenhocsinh', 'tenhocsinh', 'ten', 'hocsinh', 'fullname', 'name'].some((k) => c.includes(k))
+
+      // A valid header row should have header labels.
+      // We look for name or combination of headers. Exclude titles like "danhsach", "bang", "trungtam".
+      const hasExplicitNameHeader = normalizedCells.some(
+        (c) =>
+          !c.includes('email') &&
+          !c.includes('mail') &&
+          !c.includes('sdt') &&
+          !c.includes('phone') &&
+          !c.includes('phuhuynh') &&
+          !c.includes('parent') &&
+          (c === 'hovaten' ||
+            c === 'hoten' ||
+            c === 'hovatenhocsinh' ||
+            c === 'hotenhocsinh' ||
+            c === 'tenhocsinh' ||
+            c === 'fullname' ||
+            c === 'name' ||
+            c.includes('hovaten') ||
+            c.includes('hoten') ||
+            c.includes('tenhocsinh') ||
+            (c.includes('ten') && !c.includes('danhsach') && !c.includes('trungtam') && !c.includes('lop') && !c.includes('truong')))
       );
 
-      if (foundName !== -1) {
+      const hasOtherKeyHeader = normalizedCells.some(
+        (c) =>
+          c.includes('email') ||
+          c.includes('sdt') ||
+          c.includes('ngaysinh') ||
+          c.includes('namsinh') ||
+          c.includes('truong') ||
+          c.includes('lop')
+      );
+
+      if (hasExplicitNameHeader || (hasOtherKeyHeader && normalizedCells.filter(Boolean).length >= 2)) {
         headerRowIdx = r;
-        // Map all columns
+        // Map all columns with strict priority so Email/Phone/DOB are never confused with Student Name
         normalizedCells.forEach((c, idx) => {
           if (!c) return;
-          if (['hovaten', 'tenhocsinh', 'fullname', 'ten', 'hocsinh'].some((k) => c.includes(k)) && !colMap.name) {
-            colMap.name = idx;
-          } else if (['ngaysinh', 'namsinh', 'dob', 'birth'].some((k) => c.includes(k)) && !colMap.dob) {
-            colMap.dob = idx;
-          } else if (['sdths', 'dienthoaihs', 'sodienthoaihs', 'sdthocsinh', 'phonehs'].some((k) => c.includes(k)) && !colMap.phone) {
-            colMap.phone = idx;
-          } else if (['emailhs', 'emailhocsinh'].some((k) => c.includes(k)) && !colMap.email) {
-            colMap.email = idx;
-          } else if (['truong', 'truongphothong', 'truonghoc', 'school'].some((k) => c.includes(k)) && !colMap.school) {
-            colMap.school = idx;
-          } else if (['loptruong', 'loptruongphothong', 'loptaitruong', 'khoi', 'grade'].some((k) => c.includes(k)) && !colMap.grade) {
-            colMap.grade = idx;
-          } else if (['lopdaythem', 'lophocthem', 'lopmonhoc', 'lophoc', 'class'].some((k) => c.includes(k)) && !colMap.classRoom) {
-            colMap.classRoom = idx;
-          } else if (['hotenph', 'tenph', 'phuhuynh', 'tenphuhuynh', 'parentname', 'parent'].some((k) => c.includes(k)) && !colMap.parentName) {
-            colMap.parentName = idx;
-          } else if (['sdtph', 'dienthoaiph', 'sodienthoaiphuhuynh', 'sdtphuhuynh', 'parentphone'].some((k) => c.includes(k)) && !colMap.parentPhone) {
-            colMap.parentPhone = idx;
-          } else if (['emailph', 'emailphuhuynh', 'parentemail'].some((k) => c.includes(k)) && !colMap.parentEmail) {
-            colMap.parentEmail = idx;
-          } else if (['ghichu', 'nhanxet', 'note', 'notes'].some((k) => c.includes(k)) && !colMap.notes) {
-            colMap.notes = idx;
-          } else if (c.includes('phone') || c.includes('sdt')) {
-            if (colMap.phone === undefined) colMap.phone = idx;
-            else if (colMap.parentPhone === undefined) colMap.parentPhone = idx;
-          } else if (c.includes('email')) {
-            if (colMap.email === undefined) colMap.email = idx;
-            else if (colMap.parentEmail === undefined) colMap.parentEmail = idx;
+
+          // Priority 1: Email (Student Email vs Parent Email)
+          const isEmail = c.includes('email') || c.includes('mail') || c.includes('thudientu');
+          if (isEmail) {
+            const isParent =
+              c.includes('phuhuynh') ||
+              c.includes('ph') ||
+              c.includes('parent') ||
+              c.includes('me') ||
+              c.includes('ba') ||
+              c.includes('bo');
+            if (isParent) {
+              if (colMap.parentEmail === undefined) colMap.parentEmail = idx;
+            } else {
+              if (colMap.email === undefined) colMap.email = idx;
+            }
+            return;
+          }
+
+          // Priority 2: Phone (Student Phone vs Parent Phone)
+          const isPhone =
+            c.includes('sdt') ||
+            c.includes('phone') ||
+            c.includes('dienthoai') ||
+            c.includes('tel') ||
+            c.includes('didong') ||
+            c.includes('mobile');
+          if (isPhone) {
+            const isParent =
+              c.includes('phuhuynh') ||
+              c.includes('ph') ||
+              c.includes('parent') ||
+              c.includes('me') ||
+              c.includes('ba') ||
+              c.includes('bo');
+            if (isParent) {
+              if (colMap.parentPhone === undefined) colMap.parentPhone = idx;
+            } else {
+              if (colMap.phone === undefined) colMap.phone = idx;
+            }
+            return;
+          }
+
+          // Priority 3: Date of birth (Ngày sinh / Năm sinh)
+          const isDob =
+            c.includes('ngaysinh') ||
+            c.includes('namsinh') ||
+            c.includes('dob') ||
+            c.includes('birth') ||
+            (c.includes('sinh') && !c.includes('hocsinh') && !c.includes('sinhvien'));
+          if (isDob) {
+            if (colMap.dob === undefined) colMap.dob = idx;
+            return;
+          }
+
+          // Priority 4: Notes (Ghi chú / Nhận xét)
+          const isNotes = c.includes('ghichu') || c.includes('nhanxet') || c.includes('note');
+          if (isNotes) {
+            if (colMap.notes === undefined) colMap.notes = idx;
+            return;
+          }
+
+          // Priority 5: Parent Name (Họ tên phụ huynh)
+          const isParentName =
+            c.includes('hotenph') ||
+            c.includes('tenph') ||
+            c.includes('phuhuynh') ||
+            c.includes('parent') ||
+            (c.includes('ph') && c.includes('ten'));
+          if (isParentName) {
+            if (colMap.parentName === undefined) colMap.parentName = idx;
+            return;
+          }
+
+          // Priority 6: School & Class / Grade
+          const isSchool =
+            (c.includes('truong') || c.includes('school')) &&
+            !c.includes('loptruong') &&
+            !c.includes('loptaitruong');
+          if (isSchool) {
+            if (colMap.school === undefined) colMap.school = idx;
+            return;
+          }
+
+          const isGrade =
+            c.includes('loptruong') ||
+            c.includes('loptaitruong') ||
+            c.includes('khoi') ||
+            c.includes('grade');
+          if (isGrade) {
+            if (colMap.grade === undefined) colMap.grade = idx;
+            return;
+          }
+
+          const isClass =
+            c.includes('lopdaythem') ||
+            c.includes('lophocthem') ||
+            c.includes('lopmonhoc') ||
+            c.includes('lophoc') ||
+            c.includes('class') ||
+            c === 'lop';
+          if (isClass) {
+            if (colMap.classRoom === undefined) colMap.classRoom = idx;
+            return;
+          }
+
+          // Priority 7: Separate Last Name / First Name
+          if (c === 'ho' || c === 'hodem' || c === 'holot' || c === 'hovachudem') {
+            if (colMap.lastName === undefined) colMap.lastName = idx;
+            return;
+          }
+          if ((c === 'ten' || c === 'tenhs') && !c.includes('dangnhap') && !c.includes('taikhoan')) {
+            if (colMap.firstName === undefined) colMap.firstName = idx;
+            return;
+          }
+
+          // Priority 8: Full Name of Student
+          const isStudentName =
+            c === 'hovaten' ||
+            c === 'hoten' ||
+            c === 'hovatenhocsinh' ||
+            c === 'hotenhocsinh' ||
+            c === 'tenhocsinh' ||
+            c === 'fullname' ||
+            c === 'name' ||
+            c === 'hocsinh' ||
+            c === 'sinhvien' ||
+            c.includes('hovaten') ||
+            c.includes('hoten') ||
+            c.includes('tenhocsinh') ||
+            (c.includes('ten') &&
+              !c.includes('dangnhap') &&
+              !c.includes('taikhoan') &&
+              !c.includes('truong') &&
+              !c.includes('lop'));
+
+          if (isStudentName) {
+            if (colMap.name === undefined) colMap.name = idx;
+            return;
           }
         });
         break;
@@ -255,23 +411,83 @@ export async function parseStudentExcelFile(
       if (!hasAnyValue) continue;
 
       let rawName = '';
-      if (colMap.name !== undefined) {
+      if (colMap.lastName !== undefined && colMap.firstName !== undefined) {
+        const l = String(row[colMap.lastName] || '').trim();
+        const f = String(row[colMap.firstName] || '').trim();
+        rawName = `${l} ${f}`.trim();
+      } else if (colMap.name !== undefined && row[colMap.name] !== undefined) {
         rawName = String(row[colMap.name] || '').trim();
-      } else {
-        // Fallback: column 0 or 1
-        rawName = String(row[0] || row[1] || '').trim();
+      } else if (colMap.firstName !== undefined && row[colMap.firstName] !== undefined) {
+        rawName = String(row[colMap.firstName] || '').trim();
+      }
+
+      const rawDob = colMap.dob !== undefined ? row[colMap.dob] : '';
+      const { dob, birthYear } = normalizeExcelDate(rawDob);
+
+      const rawPhone = colMap.phone !== undefined ? row[colMap.phone] : '';
+      const phone = normalizePhoneNumber(rawPhone);
+
+      let rawEmail = colMap.email !== undefined && row[colMap.email] !== undefined
+        ? String(row[colMap.email] || '').trim()
+        : '';
+
+      const parentEmail = colMap.parentEmail !== undefined && row[colMap.parentEmail] !== undefined
+        ? String(row[colMap.parentEmail] || '').trim()
+        : '';
+
+      // CRITICAL SAFETY CHECK:
+      // If rawName was mistakenly an email address (contains '@' and '.')
+      if (rawName.includes('@') && rawName.includes('.')) {
+        if (!rawEmail) {
+          rawEmail = rawName;
+        }
+        // Search row for a real non-email, non-phone name
+        let realNameFound = '';
+        for (let cIdx = 0; cIdx < row.length; cIdx++) {
+          if (cIdx === colMap.name || cIdx === colMap.email || cIdx === colMap.parentEmail) continue;
+          const val = String(row[cIdx] || '').trim();
+          if (!val || val.includes('@')) continue;
+          if (/^\+?\d{8,12}$/.test(val.replace(/\s/g, ''))) continue; // skip phone
+          if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(val) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}$/.test(val)) continue; // skip date
+          if (/^\d+$/.test(val)) continue; // skip number
+          if (/[a-zA-Z\u00C0-\u024F\u1EA0-\u1EF9]/.test(val) && val.length >= 2) {
+            realNameFound = val;
+            break;
+          }
+        }
+        rawName = realNameFound;
+      }
+
+      // If rawName is still empty and colMap.name was not found, search row for candidate name
+      if (!rawName && colMap.name === undefined) {
+        for (let cIdx = 0; cIdx < row.length; cIdx++) {
+          if (cIdx === colMap.email || cIdx === colMap.parentEmail || cIdx === colMap.phone || cIdx === colMap.parentPhone) continue;
+          const val = String(row[cIdx] || '').trim();
+          if (!val || val.includes('@')) continue;
+          if (/^\+?\d{8,12}$/.test(val.replace(/\s/g, ''))) continue;
+          if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(val) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}$/.test(val)) continue;
+          if (/^\d+$/.test(val)) continue;
+          if (/[a-zA-Z\u00C0-\u024F\u1EA0-\u1EF9]/.test(val) && val.length >= 2) {
+            rawName = val;
+            break;
+          }
+        }
+      }
+
+      // If student email is still empty, scan row for an unused email address
+      if (!rawEmail) {
+        for (let cIdx = 0; cIdx < row.length; cIdx++) {
+          if (cIdx === colMap.parentEmail) continue;
+          const val = String(row[cIdx] || '').trim();
+          if (val.includes('@') && val.includes('.') && !val.includes(' ') && val !== parentEmail) {
+            rawEmail = val;
+            break;
+          }
+        }
       }
 
       // Non-mandatory rule: If name is missing, generate fallback
       const fullName = rawName || `Học sinh ${parsedRows.length + 1}`;
-
-      const rawDob = colMap.dob !== undefined ? row[colMap.dob] : row[1];
-      const { dob, birthYear } = normalizeExcelDate(rawDob);
-
-      const rawPhone = colMap.phone !== undefined ? row[colMap.phone] : row[2];
-      const phone = normalizePhoneNumber(rawPhone);
-
-      const rawEmail = colMap.email !== undefined ? String(row[colMap.email] || '').trim() : '';
 
       // School matching (leave blank if not provided)
       const rawSchool = colMap.school !== undefined ? String(row[colMap.school] || '').trim() : '';
@@ -335,8 +551,6 @@ export async function parseStudentExcelFile(
 
       const rawParentPhone = colMap.parentPhone !== undefined ? row[colMap.parentPhone] : '';
       const parentPhone = normalizePhoneNumber(rawParentPhone);
-
-      const parentEmail = colMap.parentEmail !== undefined ? String(row[colMap.parentEmail] || '').trim() : '';
 
       const notes = colMap.notes !== undefined ? String(row[colMap.notes] || '').trim() : '';
 

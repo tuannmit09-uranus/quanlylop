@@ -16,7 +16,9 @@ import {
   Download,
   FileSpreadsheet,
   CheckCircle2,
+  AlertTriangle,
   Upload,
+  X,
 } from 'lucide-react';
 import { StudentProfileDrawer } from './StudentProfileDrawer';
 import { StudentExcelImportModal } from './StudentExcelImportModal';
@@ -24,7 +26,7 @@ import { EditStudentModal } from './EditStudentModal';
 import { exportStudentSampleExcel } from '../../utils/studentExcelUtils';
 
 export const StudentManager: React.FC = () => {
-  const { students, addStudent, updateStudent, deleteStudent, schools, classes } = useApp();
+  const { students, addStudent, updateStudent, deleteStudent, deleteBatchStudents, schools, classes } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSchoolCode, setSelectedSchoolCode] = useState('ALL');
@@ -36,6 +38,11 @@ export const StudentManager: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
   const [updateSuccessMessage, setUpdateSuccessMessage] = useState<string | null>(null);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
+
+  // Selection & deletion states
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [studentsToDelete, setStudentsToDelete] = useState<Student[] | null>(null);
 
   // Form states
   const [fullName, setFullName] = useState('');
@@ -65,6 +72,54 @@ export const StudentManager: React.FC = () => {
     const matchesClass = selectedClassId === 'ALL' || s.enrolledClassIds.includes(selectedClassId);
     return matchesSearch && matchesSchool && matchesClass;
   });
+
+  const isAllFilteredSelected =
+    filteredStudents.length > 0 &&
+    filteredStudents.every((s) => selectedStudentIds.includes(s.id));
+  const isSomeFilteredSelected =
+    filteredStudents.some((s) => selectedStudentIds.includes(s.id)) &&
+    !isAllFilteredSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllFilteredSelected) {
+      const filteredIdSet = new Set(filteredStudents.map((s) => s.id));
+      setSelectedStudentIds((prev) => prev.filter((id) => !filteredIdSet.has(id)));
+    } else {
+      const currentSelectedSet = new Set(selectedStudentIds);
+      filteredStudents.forEach((s) => currentSelectedSet.add(s.id));
+      setSelectedStudentIds(Array.from(currentSelectedSet));
+    }
+  };
+
+  const handleToggleSelectStudent = (id: string) => {
+    setSelectedStudentIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleConfirmDelete = () => {
+    if (!studentsToDelete || studentsToDelete.length === 0) return;
+    const idsToDelete = studentsToDelete.map((s) => s.id);
+    const count = idsToDelete.length;
+
+    deleteBatchStudents(idsToDelete);
+
+    // Remove deleted IDs from current selection
+    const deletedIdSet = new Set(idsToDelete);
+    setSelectedStudentIds((prev) => prev.filter((id) => !deletedIdSet.has(id)));
+
+    // Close drawer / edit modal if active
+    if (selectedStudentForDrawer && deletedIdSet.has(selectedStudentForDrawer.id)) {
+      setSelectedStudentForDrawer(null);
+    }
+    if (editingStudent && deletedIdSet.has(editingStudent.id)) {
+      setEditingStudent(null);
+    }
+
+    setStudentsToDelete(null);
+    setDeleteSuccessMessage(`Đã xóa thành công ${count} học sinh khỏi hệ thống!`);
+    setTimeout(() => setDeleteSuccessMessage(null), 5000);
+  };
 
   const handleCreateStudent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,6 +254,22 @@ export const StudentManager: React.FC = () => {
         </div>
       )}
 
+      {deleteSuccessMessage && (
+        <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="font-bold">{deleteSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteSuccessMessage(null)}
+            className="text-rose-600 hover:text-rose-800 text-xs font-semibold cursor-pointer"
+          >
+            Đóng
+          </button>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         <div className="relative w-full md:w-80">
@@ -244,13 +315,65 @@ export const StudentManager: React.FC = () => {
         </div>
       </div>
 
+      {/* Batch Selection Action Bar */}
+      {selectedStudentIds.length > 0 && (
+        <div className="p-3 sm:p-4 bg-slate-900 text-white rounded-2xl shadow-lg border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center space-x-3 w-full sm:w-auto">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center text-xs border border-blue-500/30 shrink-0">
+              {selectedStudentIds.length}
+            </div>
+            <div>
+              <p className="text-xs font-bold text-white">
+                Đã chọn <span className="text-blue-400">{selectedStudentIds.length}</span> học sinh
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Bạn có thể xóa hàng loạt các học sinh đã chọn cùng một lúc.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={() => setSelectedStudentIds([])}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Bỏ chọn tất cả
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const toDelete = students.filter((s) => selectedStudentIds.includes(s.id));
+                setStudentsToDelete(toDelete);
+              }}
+              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md hover:shadow-lg cursor-pointer active:scale-98"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Xóa {selectedStudentIds.length} học sinh đã chọn</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Student List Table */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
               <tr>
-                <th className="py-3 px-4 w-14 text-center">STT</th>
+                <th className="py-3 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllFilteredSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = isSomeFilteredSelected;
+                    }}
+                    onChange={handleToggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                    title="Chọn tất cả học sinh đang hiển thị"
+                  />
+                </th>
+                <th className="py-3 px-3 w-12 text-center">STT</th>
                 <th className="py-3 px-4">Học sinh</th>
                 <th className="py-3 px-4">Trường phổ thông</th>
                 <th className="py-3 px-4">Lớp dạy thêm</th>
@@ -262,13 +385,31 @@ export const StudentManager: React.FC = () => {
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {filteredStudents.map((s, idx) => {
                 const enrolled = classes.filter((c) => s.enrolledClassIds.includes(c.id));
+                const isSelected = selectedStudentIds.includes(s.id);
                 return (
                   <tr
                     key={s.id}
                     onClick={() => setSelectedStudentForDrawer(s)}
-                    className="hover:bg-blue-50/40 cursor-pointer transition-colors"
+                    className={`cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-blue-50/70 hover:bg-blue-100/60'
+                        : 'hover:bg-blue-50/40'
+                    }`}
                   >
-                    <td className="py-3.5 px-4 text-center text-xs font-semibold text-slate-500">
+                    <td
+                      className="py-3.5 px-3 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelectStudent(s.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                        title={isSelected ? 'Bỏ chọn học sinh này' : 'Chọn học sinh này'}
+                      />
+                    </td>
+
+                    <td className="py-3.5 px-3 text-center text-xs font-semibold text-slate-500">
                       {idx + 1}
                     </td>
 
@@ -358,6 +499,15 @@ export const StudentManager: React.FC = () => {
                         </button>
                         <button
                           type="button"
+                          onClick={() => setStudentsToDelete([s])}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors shadow-2xs cursor-pointer"
+                          title="Xóa học sinh này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Xóa</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setSelectedStudentForDrawer(s)}
                           className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors shadow-2xs cursor-pointer"
                           title="Xem hồ sơ chi tiết"
@@ -373,7 +523,7 @@ export const StudentManager: React.FC = () => {
 
               {filteredStudents.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 px-4 text-center">
+                  <td colSpan={8} className="py-12 px-4 text-center">
                     <div className="max-w-md mx-auto space-y-3">
                       <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto">
                         <Users className="w-6 h-6" />
@@ -405,7 +555,7 @@ export const StudentManager: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setShowImportModal(true)}
-                            className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
                           >
                             <FileSpreadsheet className="w-3.5 h-3.5" />
                             <span>Import từ Excel</span>
@@ -434,16 +584,54 @@ export const StudentManager: React.FC = () => {
 
         {/* Mobile Card View (< 768px) */}
         <div className="block md:hidden divide-y divide-slate-100">
+          {filteredStudents.length > 0 && (
+            <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <label className="flex items-center space-x-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isAllFilteredSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = isSomeFilteredSelected;
+                  }}
+                  onChange={handleToggleSelectAll}
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                />
+                <span className="text-xs font-bold text-slate-700">
+                  Chọn tất cả ({filteredStudents.length})
+                </span>
+              </label>
+              {selectedStudentIds.length > 0 && (
+                <span className="text-xs text-blue-600 font-bold">
+                  Đã chọn {selectedStudentIds.length}
+                </span>
+              )}
+            </div>
+          )}
+
           {filteredStudents.map((s, idx) => {
             const enrolled = classes.filter((c) => s.enrolledClassIds.includes(c.id));
+            const isSelected = selectedStudentIds.includes(s.id);
             return (
               <div
                 key={s.id}
                 onClick={() => setSelectedStudentForDrawer(s)}
-                className="p-4 space-y-3 bg-white active:bg-slate-50 cursor-pointer"
+                className={`p-4 space-y-3 cursor-pointer transition-colors ${
+                  isSelected ? 'bg-blue-50/70 border-l-4 border-blue-600' : 'bg-white active:bg-slate-50'
+                }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center space-x-3 min-w-0">
+                    <div
+                      className="p-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelectStudent(s.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                      />
+                    </div>
                     <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-sm shrink-0 overflow-hidden">
                       {s.avatar ? (
                         <img src={s.avatar} alt={s.fullName} className="w-full h-full object-cover" />
@@ -509,18 +697,26 @@ export const StudentManager: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setEditingStudent(s)}
-                    className="flex-1 min-h-[44px] rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center justify-center space-x-1.5 active:scale-98 transition-all cursor-pointer"
+                    className="flex-1 min-h-[40px] rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center justify-center space-x-1.5 active:scale-98 transition-all cursor-pointer"
                   >
-                    <Edit2 className="w-4 h-4" />
-                    <span>Sửa hồ sơ</span>
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Sửa</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentsToDelete([s])}
+                    className="flex-1 min-h-[40px] rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center justify-center space-x-1.5 active:scale-98 transition-all cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedStudentForDrawer(s)}
-                    className="flex-1 min-h-[44px] rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center justify-center space-x-1.5 active:scale-98 transition-all cursor-pointer"
+                    className="flex-1 min-h-[40px] rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center justify-center space-x-1.5 active:scale-98 transition-all cursor-pointer"
                   >
-                    <span>Xem chi tiết</span>
-                    <ChevronRight className="w-4 h-4" />
+                    <span>Chi tiết</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -723,6 +919,92 @@ export const StudentManager: React.FC = () => {
           setTimeout(() => setUpdateSuccessMessage(null), 5000);
         }}
       />
+
+      {/* Delete Confirmation Modal */}
+      {studentsToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-start space-x-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-bold text-slate-900">
+                  {studentsToDelete.length === 1
+                    ? 'Xác nhận xóa học sinh'
+                    : `Xác nhận xóa ${studentsToDelete.length} học sinh`}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Hành động này sẽ xóa vĩnh viễn hồ sơ học sinh khỏi hệ thống.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStudentsToDelete(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* List of affected students preview */}
+            <div className="max-h-48 overflow-y-auto space-y-1.5 p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">
+                Danh sách học sinh sẽ xóa ({studentsToDelete.length}):
+              </p>
+              {studentsToDelete.slice(0, 5).map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-100 text-slate-800"
+                >
+                  <div className="min-w-0">
+                    <span className="font-bold block truncate">{s.fullName}</span>
+                    <span className="text-[11px] text-slate-500 block truncate">
+                      {s.phone ? `SĐT: ${s.phone}` : 'Chưa có SĐT'} {s.schoolName && s.schoolName !== 'Chưa cập nhật' ? `• ${s.schoolName}` : ''}
+                    </span>
+                  </div>
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-semibold shrink-0">
+                    Sẽ xóa
+                  </span>
+                </div>
+              ))}
+              {studentsToDelete.length > 5 && (
+                <p className="text-center text-[11px] text-slate-500 font-medium py-1">
+                  ...và {studentsToDelete.length - 5} học sinh khác
+                </p>
+              )}
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-2xl text-[11px] text-amber-800 space-y-1">
+              <div className="flex items-center space-x-1.5 font-bold text-amber-900">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>Lưu ý quan trọng:</span>
+              </div>
+              <p>
+                Học sinh sẽ được gỡ khỏi tất cả các lớp học thêm, điểm danh và liên kết tài khoản phụ huynh tương ứng. Thao tác này không thể hoàn tác.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setStudentsToDelete(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-md hover:shadow-lg active:scale-98 cursor-pointer flex items-center space-x-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Xác nhận xóa {studentsToDelete.length > 1 ? `(${studentsToDelete.length})` : ''}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

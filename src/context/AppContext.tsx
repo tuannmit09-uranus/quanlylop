@@ -131,6 +131,7 @@ interface AppContextType {
   addBatchStudents: (studentsList: Array<Omit<Student, 'id' | 'tenant_id' | 'joinedDate'>>) => Promise<Student[]>;
   updateStudent: (id: string, student: Partial<Student>) => void;
   deleteStudent: (id: string) => void;
+  deleteBatchStudents: (ids: string[]) => void;
 
   // Parents & Relationships & Account Management
   parents: Parent[];
@@ -1265,6 +1266,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setParentStudents((prev) => prev.filter((ps) => ps.student_id !== id));
     setAccountInvitations((prev) => prev.filter((inv) => inv.student_id !== id));
     addAuditLog('delete', 'student', id, `Xóa học sinh ID ${id}`);
+  };
+
+  const deleteBatchStudents = (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    setStudents((prev) => prev.filter((s) => !idSet.has(s.id)));
+    ids.forEach((id) => {
+      syncDeleteFromFirestore('students', id);
+    });
+    // Also cleanup classes studentIds
+    setClasses((prev) =>
+      prev.map((cls) => {
+        const hasAny = cls.studentIds.some((sId) => idSet.has(sId));
+        if (hasAny) {
+          const updatedCls = { ...cls, studentIds: cls.studentIds.filter((sId) => !idSet.has(sId)) };
+          syncSaveToFirestore('classes', cls.id, updatedCls);
+          return updatedCls;
+        }
+        return cls;
+      })
+    );
+    // Also cleanup parent_students link and invitations for these students
+    setParentStudents((prev) => prev.filter((ps) => !idSet.has(ps.student_id)));
+    setAccountInvitations((prev) => prev.filter((inv) => !inv.student_id || !idSet.has(inv.student_id)));
+    addAuditLog('delete', 'student', ids.join(','), `Xóa hàng loạt ${ids.length} học sinh`);
   };
 
   // Helper for Token Generation & Hashing
@@ -3792,6 +3818,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addBatchStudents,
         updateStudent,
         deleteStudent,
+        deleteBatchStudents,
         parents: tenantParents,
         parentStudents: tenantParentStudents,
         accountInvitations: tenantAccountInvitations,
