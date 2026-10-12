@@ -25,6 +25,7 @@ export interface TuitionPageProps {
   initialSchool?: string;
   initialClassId?: string;
   initialStatus?: string;
+  onNavigate?: (tab: string, params?: any) => void;
 }
 
 export const TuitionPage: React.FC<TuitionPageProps> = ({
@@ -33,6 +34,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   initialSchool,
   initialClassId,
   initialStatus,
+  onNavigate,
 }) => {
   const {
     tuitionItems,
@@ -81,14 +83,23 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
     if (initialStatus !== undefined) setSelectedStatus(initialStatus);
   }, [initialMonth, initialYear, initialSchool, initialClassId, initialStatus]);
 
+  // Auto-reset selectedClassId if it does not belong to the current active tenant classes
+  useEffect(() => {
+    if (selectedClassId !== 'ALL' && !classes.some((c) => c.id === selectedClassId)) {
+      setSelectedClassId('ALL');
+    }
+  }, [classes, selectedClassId]);
+
   const [selectedTuitionForQR, setSelectedTuitionForQR] = useState<TuitionItem | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
 
   const currentTenantClassIds = new Set(classes.map((c) => c.id));
   const filteredTuitions = tuitionItems.filter((t) => {
-    // Defense-in-depth: Ensure strict tenant and class isolation
-    if (t.tenant_id && currentTenant?.id && t.tenant_id !== currentTenant.id) return false;
-    if (currentTenantClassIds.size > 0 && t.classId && !currentTenantClassIds.has(t.classId)) return false;
+    // 1. Strict Tenant Isolation: item MUST belong to current active tenant
+    if (!currentTenant?.id || t.tenant_id !== currentTenant.id) return false;
+
+    // 2. Strict Class Isolation: item must belong to one of current tenant's active classes
+    if (currentTenantClassIds.size > 0 && (!t.classId || !currentTenantClassIds.has(t.classId))) return false;
 
     const matchesMonth = t.periodMonth === selectedMonth && t.periodYear === selectedYear;
     const matchesSchool = selectedSchool === 'ALL' || t.schoolCode === selectedSchool;
@@ -205,6 +216,19 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
             <Download className="w-3.5 h-3.5" />
             <span>Xuất Excel/CSV</span>
           </button>
+
+          {onNavigate && (
+            <button
+              id="navigate-to-reconciliation-btn"
+              type="button"
+              onClick={() => onNavigate('reconciliation', { month: selectedMonth, year: selectedYear })}
+              className="inline-flex items-center space-x-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-98"
+              title={`Chuyển sang trang Đối soát sao kê ngân hàng Tháng ${selectedMonth}/${selectedYear}`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Đối soát sao kê T{selectedMonth}</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -307,7 +307,7 @@ export interface TuitionItem {
   adjustmentReason?: string;
   paidAmount: number;
   status: TuitionStatus;
-  paymentReference: string; // Format: PBC_K10_Tuan_T7_2026
+  paymentReference: string; // Standard Bank Format (No underscores): SCHK09DucAnhT92026 or PBCK10TuanT72026
   lockedAt?: string;
   paidAt?: string;
   bankTransactionId?: string;

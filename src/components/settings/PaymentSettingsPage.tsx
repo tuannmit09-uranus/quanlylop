@@ -51,7 +51,7 @@ export const PaymentSettingsPage: React.FC = () => {
 
   // Live Test QR State
   const [testAmount, setTestAmount] = useState(800000);
-  const [testMemo, setTestMemo] = useState('PBC_K10_Tuan_T7_2026');
+  const [testMemo, setTestMemo] = useState('PBCK10TuanT72026');
   const [selectedStudentForTest, setSelectedStudentForTest] = useState(students[0]?.id || '');
 
   const handleSaveBank = (e: React.FormEvent) => {
@@ -82,7 +82,7 @@ export const PaymentSettingsPage: React.FC = () => {
       const birthSuffix = String(stu.birthYear || 2010).slice(-2);
       const parts = stu.fullName.trim().split(/\s+/);
       const shortName = parts[parts.length - 1] || 'HocSinh';
-      setTestMemo(`${stu.schoolCode || 'PBC'}_K${birthSuffix}_${shortName}_T7_2026`);
+      setTestMemo(`${stu.schoolCode || 'PBC'}K${birthSuffix}${shortName}T72026`);
     }
   };
 
@@ -261,13 +261,13 @@ export const PaymentSettingsPage: React.FC = () => {
 
             <div className="bg-white/10 rounded-2xl p-4 border border-white/10 space-y-2">
               <div className="text-xs font-mono font-bold text-amber-300 tracking-wider">
-                [Mã trường]_K[2 số cuối năm sinh]_[Tên học sinh]_T[Tháng]_[Năm]
+                [Mã trường]K[2 số cuối năm sinh][Tên học sinh]T[Tháng][Năm]
               </div>
               <p className="text-xs text-slate-300 leading-relaxed">
-                Ví dụ: Cháu <strong>Nguyễn Minh Tuấn</strong> học trường <strong>Phan Bội Châu (PBC)</strong>, sinh năm <strong>2010 (K10)</strong> nộp học phí <strong>Tháng 7/2026</strong> sẽ có cú pháp:
+                Ví dụ: Cháu <strong>Nguyễn Minh Tuấn</strong> học trường <strong>Phan Bội Châu (PBC)</strong>, sinh năm <strong>2010 (K10)</strong> nộp học phí <strong>Tháng 7/2026</strong> sẽ có cú pháp chuẩn ngân hàng:
               </p>
               <div className="inline-block bg-slate-950 px-3 py-1.5 rounded-xl font-mono text-emerald-400 text-xs font-bold border border-slate-800">
-                PBC_K10_Tuan_T7_2026
+                PBCK10TuanT72026
               </div>
             </div>
 

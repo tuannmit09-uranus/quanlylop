@@ -54,9 +54,19 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
     unlinkTransaction,
   } = useApp();
 
-  // Selected Period state (default to prop, or August 2026 / current)
-  const [selectedMonth, setSelectedMonth] = useState<number>(initialMonth || 8);
-  const [selectedYear, setSelectedYear] = useState<number>(initialYear || 2026);
+  // Selected Period state (default to prop, imported statement/transaction month, or current month)
+  const defaultMonth = initialMonth ?? (() => {
+    if (bankTransactions.some((t) => t.statementMonth === 9)) return 9;
+    if (bankStatements.length > 0) return bankStatements[bankStatements.length - 1].month;
+    return new Date().getMonth() + 1;
+  })();
+  const defaultYear = initialYear ?? (() => {
+    if (bankStatements.length > 0) return bankStatements[bankStatements.length - 1].year;
+    return new Date().getFullYear();
+  })();
+
+  const [selectedMonth, setSelectedMonth] = useState<number>(defaultMonth);
+  const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
 
   // Sync state if props change
   React.useEffect(() => {
@@ -69,6 +79,8 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
   const [showManualMatchModal, setShowManualMatchModal] = useState<boolean>(false);
   const [selectedTxnForMatch, setSelectedTxnForMatch] = useState<BankTransaction | null>(null);
   const [showSimulateModal, setShowSimulateModal] = useState<boolean>(false);
+  const [reconResultModal, setReconResultModal] = useState<{ matchedCount: number; discrepancyCount: number } | null>(null);
+  const [showConfirmClear, setShowConfirmClear] = useState<boolean>(false);
 
   // Filter & Search
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -145,18 +157,17 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
       });
     } catch {}
 
-    alert(
-      `Kết quả đối soát tự động Tháng ${selectedMonth}/${selectedYear}:\n` +
-        `• Khớp thành công: ${result.matchedCount} giao dịch\n` +
-        `• Lệch số tiền cần kiểm tra: ${result.discrepancyCount} giao dịch\n` +
-        `• Học phí học sinh tương ứng đã được cập nhật trạng thái "Đã nộp".`
-    );
+    setReconResultModal(result);
   };
 
   const handleCopyText = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedTxnId(id);
-    setTimeout(() => setCopiedTxnId(null), 2000);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text);
+        setCopiedTxnId(id);
+        setTimeout(() => setCopiedTxnId(null), 2000);
+      }
+    } catch {}
   };
 
   const handleOpenManualMatch = (txn: BankTransaction) => {
@@ -165,13 +176,12 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
   };
 
   const handleClearMonthData = () => {
-    if (
-      window.confirm(
-        `Bạn có chắc chắn muốn xóa toàn bộ ${monthTransactions.length} giao dịch sao kê của Tháng ${selectedMonth}/${selectedYear}? Các học phí đã đối soát sẽ được chuyển về trạng thái Chưa nộp.`
-      )
-    ) {
-      clearBankTransactionsForMonth(selectedMonth, selectedYear);
-    }
+    setShowConfirmClear(true);
+  };
+
+  const confirmClearMonthData = () => {
+    clearBankTransactionsForMonth(selectedMonth, selectedYear);
+    setShowConfirmClear(false);
   };
 
   const handleSimulateSubmit = (e: React.FormEvent) => {
@@ -774,6 +784,97 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Automated Reconciliation Result Modal */}
+      {reconResultModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-center space-y-4">
+            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <Sparkles className="w-8 h-8" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-slate-900">
+                Đối Soát Tự Động Tháng {selectedMonth}/{selectedYear}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Hệ thống đã rà soát toàn bộ sao kê và đối chiếu với danh sách học phí
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2.5 text-left text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 font-medium flex items-center space-x-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Khớp học phí thành công:</span>
+                </span>
+                <span className="font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  {reconResultModal.matchedCount} giao dịch
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 font-medium flex items-center space-x-1.5">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <span>Lệch số tiền cần kiểm tra:</span>
+                </span>
+                <span className="font-black text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                  {reconResultModal.discrepancyCount} giao dịch
+                </span>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
+                ✓ Trạng thái học phí của các học sinh khớp lệnh đã được tự động chuyển sang <strong className="text-emerald-700">&quot;Đã nộp&quot;</strong>.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setReconResultModal(null)}
+              className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+            >
+              Đóng & Xem danh sách
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Clear Month Modal */}
+      {showConfirmClear && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center space-y-4">
+            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-slate-900">
+                Xóa sao kê Tháng {selectedMonth}/{selectedYear}?
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Toàn bộ {monthTransactions.length} giao dịch sao kê của tháng này sẽ bị xóa. Các học phí đã khớp sẽ được chuyển lại trạng thái &quot;Chưa nộp&quot;.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmClear(false)}
+                className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={confirmClearMonthData}
+                className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
           </div>
         </div>
       )}

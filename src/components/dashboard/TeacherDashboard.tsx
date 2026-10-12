@@ -110,7 +110,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
             {/* Headline */}
             <h2 className="text-3xl sm:text-4xl lg:text-[40px] font-black text-[#0f172a] tracking-tight leading-tight">
-              Kính chào <span className="text-[#0062ff]">{currentTenant.teacherName || 'Cô Nga Lý'}!</span>
+              Kính chào <span className="text-[#0062ff]">{currentTenant.teacherName || currentTenant.name || 'Thầy/Cô'}!</span>
             </h2>
 
             {/* Subtitle */}
@@ -435,7 +435,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <span>Đối soát tự động ngân hàng</span>
             </div>
             <p className="text-blue-800 leading-relaxed text-[11px]">
-              Hệ thống tự động so khớp giao dịch sao kê Vietcombank/MBBank với mã <code>[Mã trường]_K[Khóa]_[Tên]_T[Tháng]_[Năm]</code>.
+              Hệ thống tự động so khớp giao dịch sao kê Vietcombank/MBBank với mã <code>[Mã trường]K[Khóa][Tên]T[Tháng][Năm]</code> (Chuẩn ngân hàng).
             </p>
           </div>
         </div>

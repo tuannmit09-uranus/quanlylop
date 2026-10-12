@@ -170,7 +170,7 @@ export const VietQRModal: React.FC<VietQRModalProps> = ({ tuition, onClose }) =>
               </button>
             </div>
             <p className="text-[10px] text-amber-800 mt-1.5">
-              * Quy tắc sinh mã: <code>[Mã trường]_K[2 số cuối năm sinh]_[Tên]_[Tháng]_[Năm]</code>
+              * Quy tắc chuẩn ngân hàng (không dấu gạch dưới): <code>[Mã trường]K[2 số cuối năm sinh][Tên]T[Tháng][Năm]</code>
             </p>
           </div>
         </div>

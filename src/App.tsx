@@ -260,19 +260,20 @@ const AppContent: React.FC = () => {
       }
       return (
         <TuitionPage
-          key={`tuition-${tuitionFilterParams?.month || 'default'}-${tuitionFilterParams?.year || 'default'}-${tuitionFilterParams?.classId || 'default'}`}
+          key={`tuition-${currentTenant?.id || 'default'}-${tuitionFilterParams?.month || 'default'}-${tuitionFilterParams?.year || 'default'}-${tuitionFilterParams?.classId || 'default'}`}
           initialMonth={tuitionFilterParams?.month}
           initialYear={tuitionFilterParams?.year}
           initialSchool={tuitionFilterParams?.schoolCode}
           initialClassId={tuitionFilterParams?.classId}
           initialStatus={tuitionFilterParams?.status}
+          onNavigate={(tab, params) => handleNavigate(tab, params)}
         />
       );
     }
     if (activeTab === 'bank-statements' || activeTab === 'reconciliation') {
       return (
         <ReconciliationPage
-          key={`recon-${reconciliationFilterParams?.month || 'default'}-${reconciliationFilterParams?.year || 'default'}`}
+          key={`recon-${currentTenant?.id || 'default'}-${reconciliationFilterParams?.month || 'default'}-${reconciliationFilterParams?.year || 'default'}`}
           initialMonth={reconciliationFilterParams?.month}
           initialYear={reconciliationFilterParams?.year}
         />

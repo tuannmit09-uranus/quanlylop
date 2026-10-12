@@ -57,7 +57,7 @@ import {
   INITIAL_AUDIT_LOGS,
   DEFAULT_CUSTOM_CREDENTIALS,
 } from '../data/initialData';
-import { generatePaymentReference, removeVietnameseAccents } from '../utils/vietqr';
+import { generatePaymentReference, removeVietnameseAccents, normalizeBankMemo } from '../utils/vietqr';
 import { testFirebaseConnection } from '../lib/firebase';
 import {
   seedCollectionIfEmpty,
@@ -142,6 +142,9 @@ interface AppContextType {
   deleteParent: (id: string) => void;
   linkParentToStudent: (parentId: string, studentId: string, relationship?: string, is_primary?: boolean) => void;
   unlinkParentStudent: (parentStudentId: string) => void;
+  unlinkParentFromStudent?: (parentId: string, studentId: string) => void;
+  updateStudentAccountStatus?: (studentId: string, status: any) => void;
+  updateParentAccountStatus?: (parentId: string, status: any) => void;
   issueStudentInvitation: (studentId: string, email?: string, phone?: string) => { success: boolean; message: string; invitation?: AccountInvitation; activationLink?: string };
   issueParentInvitation: (studentId: string, parentData: { fullName: string; relationship: string; phone: string; email?: string; is_primary: boolean }) => { success: boolean; message: string; invitation?: AccountInvitation; activationLink?: string };
   resendInvitation: (invitationId: string) => { success: boolean; message: string; invitation?: AccountInvitation; activationLink?: string };
@@ -239,7 +242,9 @@ interface AppContextType {
   // Notifications & Audit Logs
   notifications: NotificationItem[];
   markNotificationRead: (id: string) => void;
+  markNotificationAsRead?: (id: string) => void;
   markAllNotificationsRead: () => void;
+  markAllNotificationsAsRead?: () => void;
   auditLogs: AuditLog[];
   allAuditLogs?: AuditLog[];
 
@@ -534,7 +539,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }),
           subscribeToCollection<TuitionItem>('tuitions', (items) => {
             const deleted = getDeletedTenantIdsLocal();
-            setTuitionItems((items || []).filter((t) => !t.tenant_id || !deleted.has(t.tenant_id)));
+            const standardized = (items || [])
+              .filter((t) => !t.tenant_id || !deleted.has(t.tenant_id))
+              .map((t) => ({
+                ...t,
+                paymentReference: (t.paymentReference || '').replace(/_/g, ''),
+              }));
+            setTuitionItems(standardized);
           }),
           subscribeToCollection<BankStatement>('bankStatements', (items) => {
             const deleted = getDeletedTenantIdsLocal();
@@ -542,7 +553,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }),
           subscribeToCollection<BankTransaction>('bankTransactions', (items) => {
             const deleted = getDeletedTenantIdsLocal();
-            setBankTransactions((items || []).filter((b) => !b.tenant_id || !deleted.has(b.tenant_id)));
+            const standardized = (items || [])
+              .filter((b) => !b.tenant_id || !deleted.has(b.tenant_id))
+              .map((b) => ({
+                ...b,
+                matchedPaymentReference: b.matchedPaymentReference
+                  ? b.matchedPaymentReference.replace(/_/g, '')
+                  : b.matchedPaymentReference,
+              }));
+            setBankTransactions(standardized);
           }),
           subscribeToCollection<NotificationItem>('notifications', (items) => {
             const deleted = getDeletedTenantIdsLocal();
@@ -692,8 +711,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           cls.studentIds.forEach((studentId) => {
             const student = students.find((s) => s.id === studentId);
             if (!student) return;
-            // Strict tenant isolation: Student must belong to the class's tenant
-            if (student.tenant_id && student.tenant_id !== classTenantId) return;
+            // Strict tenant isolation: Student MUST belong to the class's tenant
+            if (student.tenant_id !== classTenantId) return;
 
             if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0 && !student.enrolledClassIds.includes(cls.id)) {
               return;
@@ -702,14 +721,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Find sessions of this class in this month/year with feeEligible === true where student is 'present'
             const studentPresentSessions = lessonSessions.filter((s) => {
               if (s.classId !== cls.id) return false;
-              if (s.tenant_id && s.tenant_id !== classTenantId) return false;
+              if (s.tenant_id !== classTenantId) return false;
               if (!s.feeEligible) return false;
               if (s.status === 'cancelled') return false; // Exclude cancelled sessions
               const [sYear, sMonth] = s.date.split('-').map(Number);
               if (sYear !== year || sMonth !== month) return false;
 
               const attRecord = attendance.find(
-                (a) => a.sessionId === s.id && a.studentId === studentId && (!a.tenant_id || a.tenant_id === classTenantId)
+                (a) => a.sessionId === s.id && a.studentId === studentId && a.tenant_id === classTenantId
               );
               return attRecord?.status === 'present';
             });
@@ -725,7 +744,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               month,
               year,
               student.id,
-              students.filter((st) => !st.tenant_id || st.tenant_id === classTenantId)
+              students.filter((st) => st.tenant_id === classTenantId)
             );
 
             // Match strictly by classTenantId, student, class, period
@@ -1083,6 +1102,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteClass = (id: string) => {
     setClasses((prev) => prev.filter((c) => c.id !== id));
     syncDeleteFromFirestore('classes', id);
+
+    // Cascade delete tuition records for this class
+    setTuitionItems((prev) => {
+      const remaining = prev.filter((t) => t.classId !== id);
+      const toDelete = prev.filter((t) => t.classId === id);
+      toDelete.forEach((t) => syncDeleteFromFirestore('tuitions', t.id));
+      return remaining;
+    });
+
+    // Cascade delete sessions for this class
+    setLessonSessions((prev) => {
+      const remaining = prev.filter((s) => s.classId !== id);
+      const toDelete = prev.filter((s) => s.classId === id);
+      toDelete.forEach((s) => syncDeleteFromFirestore('sessions', s.id));
+      return remaining;
+    });
+
+    // Cascade delete recurring schedules for this class
+    setRecurringSchedules((prev) => {
+      const remaining = prev.filter((rs) => rs.classId !== id);
+      const toDelete = prev.filter((rs) => rs.classId === id);
+      toDelete.forEach((rs) => syncDeleteFromFirestore('schedules', rs.id));
+      return remaining;
+    });
+
+    // Also remove from student enrolledClassIds
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (Array.isArray(s.enrolledClassIds) && s.enrolledClassIds.includes(id)) {
+          const updatedS = { ...s, enrolledClassIds: s.enrolledClassIds.filter((cId) => cId !== id) };
+          syncSaveToFirestore('students', s.id, updatedS);
+          return updatedS;
+        }
+        return s;
+      })
+    );
+
     addAuditLog('delete', 'class', id, `Xóa lớp học ID ${id}`);
   };
 
@@ -1279,6 +1335,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteStudent = (id: string) => {
     setStudents((prev) => prev.filter((s) => s.id !== id));
     syncDeleteFromFirestore('students', id);
+    // Cascade delete tuition records for this student
+    setTuitionItems((prev) => {
+      const remaining = prev.filter((t) => t.studentId !== id);
+      const toDelete = prev.filter((t) => t.studentId === id);
+      toDelete.forEach((t) => syncDeleteFromFirestore('tuitions', t.id));
+      return remaining;
+    });
     // Also cleanup classes studentIds
     setClasses((prev) =>
       prev.map((cls) => {
@@ -1302,6 +1365,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStudents((prev) => prev.filter((s) => !idSet.has(s.id)));
     ids.forEach((id) => {
       syncDeleteFromFirestore('students', id);
+    });
+    // Cascade delete tuition records for these students
+    setTuitionItems((prev) => {
+      const remaining = prev.filter((t) => !idSet.has(t.studentId));
+      const toDelete = prev.filter((t) => idSet.has(t.studentId));
+      toDelete.forEach((t) => syncDeleteFromFirestore('tuitions', t.id));
+      return remaining;
     });
     // Also cleanup classes studentIds
     setClasses((prev) =>
@@ -2893,8 +2963,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cls.studentIds.forEach((studentId) => {
         const student = students.find((s) => s.id === studentId);
         if (!student) return;
-        // Strictly ignore if student belongs to another tenant
-        if (student.tenant_id && student.tenant_id !== currentTenant.id) return;
+        // Strictly require student to belong to the current active tenant
+        if (student.tenant_id !== currentTenant.id) return;
 
         if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0 && !student.enrolledClassIds.includes(cls.id)) {
           return;
@@ -2903,14 +2973,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Find sessions of this class in this month/year with feeEligible === true where student is marked 'present'
         const studentPresentSessions = lessonSessions.filter((s) => {
           if (s.classId !== cls.id) return false;
-          if (s.tenant_id && s.tenant_id !== currentTenant.id) return false;
+          if (s.tenant_id !== currentTenant.id) return false;
           if (!s.feeEligible) return false;
           if (s.status === 'cancelled') return false;
           const [sYear, sMonth] = s.date.split('-').map(Number);
           if (sYear !== year || sMonth !== month) return false;
 
           const attRecord = attendance.find(
-            (a) => a.sessionId === s.id && a.studentId === studentId && (!a.tenant_id || a.tenant_id === currentTenant.id)
+            (a) => a.sessionId === s.id && a.studentId === studentId && a.tenant_id === currentTenant.id
           );
           return attRecord?.status === 'present';
         });
@@ -2919,7 +2989,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const sessionCount = sessionIds.length;
         const totalAmount = sessionCount * cls.feePerSession;
 
-        // Payment Reference format: [Mã trường]_K[2 số cuối năm sinh]_[Tên học sinh]_T[Tháng]_[Năm] (Auto-disambiguates if duplicates exist)
+        // Payment Reference format: [Mã trường]K[2 số cuối năm sinh][Tên học sinh]T[Tháng][Năm] (Chuẩn ngân hàng không dấu gạch dưới, tự động phân biệt trùng tên)
         const paymentReference = generatePaymentReference(
           student.schoolCode,
           student.birthYear,
@@ -2927,10 +2997,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           month,
           year,
           student.id,
-          students.filter((st) => !st.tenant_id || st.tenant_id === currentTenant.id)
+          students.filter((st) => st.tenant_id === currentTenant.id)
         );
 
-        const targetTenantId = cls.tenant_id || currentTenant.id;
+        const targetTenantId = currentTenant.id;
 
         // Check if existing strictly within this tenant
         const existing = tuitionItems.find(
@@ -3240,31 +3310,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     unassignedTxns.forEach((txn) => {
       if (txn.reconciliationStatus === 'matched') return;
 
-      const rawDesc = txn.description;
+      const rawDesc = txn.description || '';
       const cleanDesc = rawDesc.toUpperCase();
       const unaccentedDesc = removeVietnameseAccents(rawDesc).toLowerCase();
+      const normalizedDesc = normalizeBankMemo(rawDesc);
 
       // Strategy 1: Find matching tuition by payment reference (strictly currentTenant)
+      // Normalizes away underscores, spaces, dashes so SCH_K09_DucAnh_T9_2026 matches SCHK09DucAnhT92026 100%
       let matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
         if (tui.tenant_id !== currentTenant.id) return false;
         if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-        const ref = tui.paymentReference.toUpperCase();
-        if (cleanDesc.includes(ref)) return true;
+        if (!tui.paymentReference) return false;
 
-        // Sub-check: without year/month suffix, e.g. "PBC_K10_TUAN"
-        const refParts = ref.split('_T');
-        if (refParts[0] && refParts[0].length >= 8 && cleanDesc.includes(refParts[0])) return true;
+        // Exact match with normalized bank format (no underscores, no spaces)
+        const normalizedRef = normalizeBankMemo(tui.paymentReference);
+        if (normalizedRef && normalizedDesc.includes(normalizedRef)) return true;
+
+        // Direct containment in clean description
+        const rawRefUpper = tui.paymentReference.toUpperCase();
+        if (cleanDesc.includes(rawRefUpper)) return true;
+
+        // Sub-check without disambiguation numeric index: e.g. "SCHK09VU1T92026" matches "SCHK09VUT92026"
+        const refWithoutNumIndex = normalizedRef.replace(/\d+(T\d{1,2}\d{4})$/, '$1');
+        if (refWithoutNumIndex && refWithoutNumIndex !== normalizedRef && normalizedDesc.includes(refWithoutNumIndex)) {
+          return true;
+        }
+
+        // Sub-check: without year/month suffix e.g. "SCHK09DUCANH" (when exact amount matches)
+        const shortRef = normalizedRef.replace(/T\d{1,2}\d{4}$/, '');
+        if (shortRef && shortRef.length >= 6 && normalizedDesc.includes(shortRef)) {
+          if (txn.amount === tui.totalAmount) return true;
+        }
+
+        const shortWithoutNumIndex = shortRef.replace(/\d+$/, '');
+        if (shortWithoutNumIndex && shortWithoutNumIndex.length >= 6 && normalizedDesc.includes(shortWithoutNumIndex)) {
+          if (txn.amount === tui.totalAmount) return true;
+        }
+
+        // Sub-check with old underscore format: e.g. "SCH_K09_DUCANH"
+        const refParts = rawRefUpper.split('_T');
+        if (refParts[0] && refParts[0].length >= 8 && cleanDesc.includes(refParts[0])) {
+          if (txn.amount === tui.totalAmount) return true;
+        }
 
         return false;
       });
 
-      // Strategy 2: Match by Student unaccented full name (strictly currentTenant)
+      // Strategy 2: Match by Student unaccented full name or short call-name (strictly currentTenant)
       if (matchedTuitionIndex < 0) {
         matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
           if (tui.tenant_id !== currentTenant.id) return false;
           if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-          const student = students.find((s) => s.id === tui.studentId && (!s.tenant_id || s.tenant_id === currentTenant.id));
+          const student = students.find((s) => s.id === tui.studentId && s.tenant_id === currentTenant.id);
           if (!student) return false;
+
+          const studentNormalized = normalizeBankMemo(student.fullName);
+          if (studentNormalized.length >= 4 && normalizedDesc.includes(studentNormalized) && txn.amount === tui.totalAmount) {
+            return true;
+          }
 
           const unaccentedStudentName = removeVietnameseAccents(student.fullName).toLowerCase();
           if (unaccentedStudentName.length > 3 && unaccentedDesc.includes(unaccentedStudentName)) {
@@ -3279,8 +3382,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
           if (tui.tenant_id !== currentTenant.id) return false;
           if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-          const student = students.find((s) => s.id === tui.studentId && (!s.tenant_id || s.tenant_id === currentTenant.id));
+          const student = students.find((s) => s.id === tui.studentId && s.tenant_id === currentTenant.id);
           if (!student || !student.parentName) return false;
+
+          const parentNormalized = normalizeBankMemo(student.parentName);
+          if (parentNormalized.length >= 4 && normalizedDesc.includes(parentNormalized) && txn.amount === tui.totalAmount) {
+            return true;
+          }
 
           const unaccentedParentName = removeVietnameseAccents(student.parentName).toLowerCase();
           if (unaccentedParentName.length > 4 && unaccentedDesc.includes(unaccentedParentName)) {
@@ -3295,7 +3403,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
           if (tui.tenant_id !== currentTenant.id) return false;
           if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-          const student = students.find((s) => s.id === tui.studentId && (!s.tenant_id || s.tenant_id === currentTenant.id));
+          const student = students.find((s) => s.id === tui.studentId && s.tenant_id === currentTenant.id);
           if (!student) return false;
 
           const parentDigits = (student.parentPhone || '').replace(/\D/g, '');
@@ -3315,44 +3423,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (isAmountExact) {
           // Exact Match (100% amount & identification)
-          updatedTuitions[matchedTuitionIndex] = {
+          const updatedTui = {
             ...tui,
-            status: 'paid',
+            status: 'paid' as const,
             paidAmount: txn.amount,
             bankTransactionId: txn.id,
             paidAt: txn.transactionDate,
           };
+          updatedTuitions[matchedTuitionIndex] = updatedTui;
+          syncSaveToFirestore('tuitions', updatedTui.id, updatedTui);
+
           if (txnIdx >= 0) {
-            updatedTxns[txnIdx] = {
+            const updatedTxnObj = {
               ...updatedTxns[txnIdx],
               matchedTuitionId: tui.id,
               matchedStudentName: tui.studentName,
-              matchedPaymentReference: tui.paymentReference,
-              reconciliationStatus: 'matched',
+              matchedPaymentReference: (tui.paymentReference || '').replace(/_/g, ''),
+              reconciliationStatus: 'matched' as const,
               reconciledAt: new Date().toLocaleString('vi-VN'),
               notes: `Khớp chính xác ${txn.amount.toLocaleString('vi-VN')}đ với học sinh ${tui.studentName} (${tui.className})`,
             };
+            updatedTxns[txnIdx] = updatedTxnObj;
+            syncSaveToFirestore('bankTransactions', updatedTxnObj.id, updatedTxnObj);
           }
           matchedCount++;
         } else {
           // Discrepancy (Amount mismatch)
-          updatedTuitions[matchedTuitionIndex] = {
+          const updatedTui = {
             ...tui,
-            status: txn.amount < tui.totalAmount ? 'partial' : 'overpaid',
+            status: (txn.amount < tui.totalAmount ? 'partial' : 'overpaid') as any,
             paidAmount: txn.amount,
             bankTransactionId: txn.id,
             paidAt: txn.transactionDate,
           };
+          updatedTuitions[matchedTuitionIndex] = updatedTui;
+          syncSaveToFirestore('tuitions', updatedTui.id, updatedTui);
+
           if (txnIdx >= 0) {
-            updatedTxns[txnIdx] = {
+            const updatedTxnObj = {
               ...updatedTxns[txnIdx],
               matchedTuitionId: tui.id,
               matchedStudentName: tui.studentName,
-              matchedPaymentReference: tui.paymentReference,
-              reconciliationStatus: 'discrepancy',
+              matchedPaymentReference: (tui.paymentReference || '').replace(/_/g, ''),
+              reconciliationStatus: 'discrepancy' as const,
               reconciledAt: new Date().toLocaleString('vi-VN'),
               notes: `Nhận diện học sinh ${tui.studentName} nhưng số tiền chuyển ${txn.amount.toLocaleString('vi-VN')}đ lệch so với học phí ${tui.totalAmount.toLocaleString('vi-VN')}đ`,
             };
+            updatedTxns[txnIdx] = updatedTxnObj;
+            syncSaveToFirestore('bankTransactions', updatedTxnObj.id, updatedTxnObj);
           }
           discrepancyCount++;
         }
@@ -3361,9 +3479,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setTuitionItems(updatedTuitions);
     setBankTransactions(updatedTxns);
-
-    updatedTuitions.forEach((t) => syncSaveToFirestore('tuitions', t.id, t));
-    updatedTxns.forEach((tx) => syncSaveToFirestore('bankTransactions', tx.id, tx));
 
     if (matchedCount > 0) {
       try {
@@ -3385,6 +3500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const tui = tuitionItems.find((t) => t.id === tuitionId);
     const txn = bankTransactions.find((tx) => tx.id === txnId);
     if (!tui || !txn) return;
+    if (tui.tenant_id !== currentTenant.id || txn.tenant_id !== currentTenant.id) return;
 
     const updatedTui = {
       ...tui,
@@ -3425,6 +3541,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const unlinkTransaction = (txnId: string) => {
     const txn = bankTransactions.find((tx) => tx.id === txnId);
     if (!txn || !txn.matchedTuitionId) return;
+    if (txn.tenant_id !== currentTenant.id) return;
 
     const tuitionId = txn.matchedTuitionId;
     const tui = tuitionItems.find((t) => t.id === tuitionId);
@@ -3943,7 +4060,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatePaymentAccount,
         notifications: tenantNotifications,
         markNotificationRead,
+        markNotificationAsRead: markNotificationRead,
         markAllNotificationsRead,
+        markAllNotificationsAsRead: markAllNotificationsRead,
         auditLogs: effectiveAuditLogs,
         allAuditLogs: auditLogs,
         refreshCloudData,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { BankTransaction } from '../../types';
-import { formatVND } from '../../utils/vietqr';
+import { formatVND, normalizeBankMemo } from '../../utils/vietqr';
 import {
   Link2,
   X,
@@ -41,11 +41,14 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
     if (!searchTerm) return true;
 
     const term = searchTerm.toLowerCase();
+    const normalizedTerm = normalizeBankMemo(searchTerm);
+    const normalizedRef = normalizeBankMemo(tui.paymentReference);
     const student = students.find((s) => s.id === tui.studentId);
     return (
       tui.studentName.toLowerCase().includes(term) ||
       tui.className.toLowerCase().includes(term) ||
       tui.paymentReference.toLowerCase().includes(term) ||
+      (normalizedTerm && normalizedRef.includes(normalizedTerm)) ||
       (student && student.parentName && student.parentName.toLowerCase().includes(term))
     );
   });

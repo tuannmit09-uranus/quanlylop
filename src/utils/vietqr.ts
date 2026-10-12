@@ -1,8 +1,9 @@
 /**
  * VietQR and Payment Helper Utilities
- * Implements standard payment reference generation:
- * [Mã trường]_K[2 số cuối năm sinh]_[Tên học sinh]_T[Tháng]_[Năm]
- * Example: PBC_K10_Tuan_T7_2026
+ * Implements bank-standard payment reference generation:
+ * [Mã trường]K[2 số cuối năm sinh][Tên học sinh]T[Tháng][Năm]
+ * Example: SCHK09DucAnhT92026 or PBCK10TuanT72026
+ * (Strictly NO underscores - ensures 100% exact match with mobile banking apps & bank statements)
  */
 
 /**
@@ -29,6 +30,21 @@ export function removeVietnameseAccents(str: string): string {
 }
 
 /**
+ * Normalizes bank transaction descriptions and payment references
+ * by removing Vietnamese accents, underscores, spaces, dashes, dots,
+ * and converting to uppercase for 100% reliable bank reconciliation.
+ * e.g. "SCH_K09_DucAnh_T9_2026" -> "SCHK09DUCANHT92026"
+ *      "SCHK09DucAnhT92026"    -> "SCHK09DUCANHT92026"
+ *      "SCH K09 Duc Anh T9 2026" -> "SCHK09DUCANHT92026"
+ */
+export function normalizeBankMemo(str: string): string {
+  if (!str) return '';
+  return removeVietnameseAccents(str)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+/**
  * Extracts normalized first name / short call-name for transfer memo
  * e.g. "Nguyễn Minh Tuấn" -> "Tuan", "Trần Bảo Ngọc" -> "Ngoc"
  */
@@ -43,11 +59,11 @@ export function extractFirstNameForMemo(fullName: string): string {
 
 /**
  * Smart Disambiguation Engine for Payment Reference:
- * 1. Default (Unique in school/grade/class): "Tuan" -> PBC_K10_Tuan_T8_2026
+ * 1. Default (Unique in school/grade/class): "Tuan" -> PBCK10TuanT82026
  * 2. Duplicate First Name (e.g. "Nguyễn Văn Tuấn" & "Nguyễn Minh Tuấn"):
- *    -> Adds Middle Name: "VanTuan" & "MinhTuan" -> PBC_K10_VanTuan_T8_2026 & PBC_K10_MinhTuan_T8_2026
+ *    -> Adds Middle Name: "VanTuan" & "MinhTuan" -> PBCK10VanTuanT82026 & PBCK10MinhTuanT82026
  * 3. Identical Full Name (e.g. 2 students both named "Nguyễn Văn Tuấn"):
- *    -> Appends index suffix: "VanTuan1" & "VanTuan2" -> PBC_K10_VanTuan1_T8_2026
+ *    -> Appends index suffix: "VanTuan1" & "VanTuan2" -> PBCK10VanTuan1T82026
  */
 export function extractUniqueNameForMemo(
   studentFullName: string,
@@ -117,8 +133,19 @@ export function extractUniqueNameForMemo(
 }
 
 /**
+ * Standardizes any existing or legacy payment reference by stripping underscores,
+ * spaces, and special characters to match the mobile banking standard.
+ * e.g. "SCH_K09_DucAnh_T9_2026" -> "SCHK09DucAnhT92026"
+ */
+export function standardizePaymentReference(ref: string): string {
+  if (!ref) return '';
+  return ref.replace(/[^a-zA-Z0-9]/g, '');
+}
+
+/**
  * Generates the standardized Payment Reference Memo
- * Rule BR-010 / SRS: [Mã trường]_K[2 số cuối năm sinh]_[Tên học sinh]_T[Tháng]_[Năm]
+ * Bank-Standard Format: [Mã trường]K[2 số cuối năm sinh][Tên học sinh]T[Tháng][Năm]
+ * Example: SCHK09DucAnhT92026 (Strictly NO underscores, prevents banking apps from stripping characters)
  * Auto-disambiguates when duplicate names exist in the student pool
  */
 export function generatePaymentReference(
@@ -132,8 +159,9 @@ export function generatePaymentReference(
 ): string {
   const cleanSchool = (schoolCode || 'SCH').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const birthSuffix = String(birthYear || 2010).slice(-2);
-  const uniqueName = extractUniqueNameForMemo(studentFullName, studentId, contextStudents);
-  return `${cleanSchool}_K${birthSuffix}_${uniqueName}_T${month}_${year}`;
+  const rawUniqueName = extractUniqueNameForMemo(studentFullName, studentId, contextStudents);
+  const uniqueName = rawUniqueName.replace(/[^a-zA-Z0-9]/g, '');
+  return `${cleanSchool}K${birthSuffix}${uniqueName}T${month}${year}`;
 }
 
 /**

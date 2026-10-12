@@ -42,7 +42,9 @@ export const StudentTuitionView: React.FC = () => {
     students[0];
 
   // Strictly filter tuition items for this student only
-  const myTuitions = tuitionItems.filter((t) => t.studentId === currentStudent.id);
+  const myTuitions = currentStudent
+    ? tuitionItems.filter((t) => t.studentId === currentStudent.id)
+    : [];
 
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [selectedTuitionForQR, setSelectedTuitionForQR] = useState<TuitionItem | null>(null);
@@ -56,10 +58,16 @@ export const StudentTuitionView: React.FC = () => {
     .reduce((acc, cur) => acc + (cur.paidAmount || cur.totalAmount), 0);
   const unpaidAmount = totalAmount - paidAmount;
 
-  const handleCopyRef = (ref: string) => {
-    navigator.clipboard.writeText(ref);
-    setCopiedRef(ref);
-    setTimeout(() => setCopiedRef(null), 2500);
+  const handleCopyRef = async (ref: string) => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(ref);
+        setCopiedRef(ref);
+        setTimeout(() => setCopiedRef(null), 2500);
+      }
+    } catch {
+      // Ignore clipboard error in iframe
+    }
   };
 
   return (

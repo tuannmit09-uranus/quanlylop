@@ -354,7 +354,7 @@ export function exportSampleVietcombankExcel(month: number = 8, year: number = 2
       '',
       800000,
       4556830,
-      `MBVCB.7492831.PBC_K10_Tuan_T${month}_${year} NGUYEN VAN HUNG NOP TIEN HOC PHI THANG ${month}`,
+      `MBVCB.7492831.PBCK10TuanT${month}${year} NGUYEN VAN HUNG NOP TIEN HOC PHI THANG ${month}`,
     ],
     [
       6,
@@ -362,7 +362,7 @@ export function exportSampleVietcombankExcel(month: number = 8, year: number = 2
       '',
       800000,
       5356830,
-      `IBFT.LE THI LAN CHUYEN KHOAN PBC_K10_Long_T${month}_${year} HOC PHI TOAN`,
+      `IBFT.LE THI LAN CHUYEN KHOAN PBCK10LongT${month}${year} HOC PHI TOAN`,
     ],
     [
       7,
@@ -370,7 +370,7 @@ export function exportSampleVietcombankExcel(month: number = 8, year: number = 2
       '',
       960000,
       6316830,
-      `NAPAS 1029384 PBC_K09_Minh_T${month}_${year} VU TRONG PHUNG NOP HOC PHI LOP 11A`,
+      `NAPAS 1029384 PBCK09MinhT${month}${year} VU TRONG PHUNG NOP HOC PHI LOP 11A`,
     ],
   ];
 

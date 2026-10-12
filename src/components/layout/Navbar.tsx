@@ -648,13 +648,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5">
                 <h4 className="font-semibold text-emerald-900 flex items-center">
                   <CheckCircle2 className="w-4 h-4 mr-1.5 text-emerald-600" />
-                  Quy tắc 2: Cú pháp mã VietQR chuyển khoản
+                  Quy tắc 2: Cú pháp mã VietQR chuẩn ngân hàng
                 </h4>
                 <p className="text-xs text-emerald-800 mt-1 font-mono">
-                  [Mã trường]_K[2 số cuối năm sinh]_[Tên học sinh]_T[Tháng]_[Năm]
+                  [Mã trường]K[2 số cuối năm sinh][Tên học sinh]T[Tháng][Năm]
                 </p>
                 <p className="text-xs text-emerald-700 mt-1">
-                  Ví dụ: <strong>PBC_K10_Tuan_T7_2026</strong> (Trường THPT Phan Bội Châu, sinh năm 2010, em Tuấn, học phí tháng 7/2026).
+                  Ví dụ: <strong>PBCK10TuanT72026</strong> hoặc <strong>SCHK09DucAnhT92026</strong> (Không dùng gạch dưới, chống app ngân hàng tự ý cắt bỏ ký tự).
                 </p>
               </div>
 
