@@ -25,12 +25,14 @@ import {
 interface StudentExcelImportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialClassId?: string;
   onSuccess?: (count: number) => void;
 }
 
 export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = ({
   isOpen,
   onClose,
+  initialClassId,
   onSuccess,
 }) => {
   const { schools, classes, addBatchStudents, currentTenant } = useApp();
@@ -41,7 +43,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Global defaults for this import
+  // Global defaults for this import - Class is MANDATORY
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>('');
 
@@ -54,10 +56,49 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Initialize selected class when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialClassId && classes.some((c) => c.id === initialClassId)) {
+        setSelectedClassId(initialClassId);
+      } else if (!selectedClassId && classes.length > 0) {
+        setSelectedClassId(classes[0].id);
+      }
+      setError(null);
+    }
+  }, [isOpen, initialClassId, classes]);
+
   if (!isOpen) return null;
+
+  // Handle changing class and updating existing preview rows
+  const handleClassChange = (newClassId: string) => {
+    setSelectedClassId(newClassId);
+    setError(null);
+    if (newClassId && previewRows.length > 0) {
+      const cls = classes.find((c) => c.id === newClassId);
+      setPreviewRows((prev) =>
+        prev.map((r) => {
+          const hasClass = r.enrolledClassIds.includes(newClassId);
+          return {
+            ...r,
+            enrolledClassIds: hasClass ? r.enrolledClassIds : [...r.enrolledClassIds, newClassId],
+            enrolledClassNames:
+              cls && !r.enrolledClassNames.includes(cls.name)
+                ? [...r.enrolledClassNames, cls.name]
+                : r.enrolledClassNames,
+          };
+        })
+      );
+    }
+  };
 
   // Handler for Excel file processing
   const handleProcessFile = async (uploadedFile: File) => {
+    if (!selectedClassId) {
+      setError('Bắt buộc phải chọn Lớp học trước khi tải lên hoặc xử lý file Excel.');
+      return;
+    }
+
     const validExts = ['.xlsx', '.xls', '.csv'];
     const lowerName = uploadedFile.name.toLowerCase();
     const isValid = validExts.some((ext) => lowerName.endsWith(ext));
@@ -73,7 +114,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
 
     try {
       const result = await parseStudentExcelFile(uploadedFile, {
-        defaultClassId: selectedClassId || undefined,
+        defaultClassId: selectedClassId,
         defaultSchoolId: selectedSchoolId || undefined,
         existingSchools: schools,
         existingClasses: classes,
@@ -94,6 +135,10 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedClassId) {
+      setError('Bắt buộc phải chọn Lớp học ở phần trên trước khi chọn file Excel.');
+      return;
+    }
     if (e.target.files && e.target.files[0]) {
       handleProcessFile(e.target.files[0]);
     }
@@ -102,20 +147,28 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
+    if (!selectedClassId) {
+      setError('Bắt buộc phải chọn Lớp học ở phần trên trước khi kéo thả file Excel.');
+      return;
+    }
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleProcessFile(e.dataTransfer.files[0]);
     }
   };
 
-  // Handler for Quick Text Paste - Mã trường và Phụ huynh để trống hoàn toàn
+  // Handler for Quick Text Paste - Mã trường và Phụ huynh để trống hoàn toàn, BẮT BUỘC chọn lớp
   const handleParsePastedText = () => {
+    if (!selectedClassId) {
+      setError('Bắt buộc phải chọn Lớp học trước khi trích xuất danh sách dán tên.');
+      return;
+    }
     if (!pasteText.trim()) {
       setError('Vui lòng dán danh sách tên học sinh (mỗi học sinh 1 dòng).');
       return;
     }
     setError(null);
     const rows = parseRawStudentNames(pasteText, {
-      defaultClassId: selectedClassId || undefined,
+      defaultClassId: selectedClassId,
       defaultSchoolId: undefined, // Không tự động gán mã trường hay trường mặc định
       existingSchools: schools,
       existingClasses: classes,
@@ -143,6 +196,10 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
   // Confirm import
   const handleConfirmImport = async () => {
     if (previewRows.length === 0) return;
+    if (!selectedClassId) {
+      setError('Bắt buộc phải chọn Lớp học để gán cho danh sách học sinh trước khi nhập.');
+      return;
+    }
     setIsSaving(true);
     try {
       const studentsToInsert = previewRows.map((r) => {
@@ -150,6 +207,9 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
         let classIds = [...r.enrolledClassIds];
         if (selectedClassId && !classIds.includes(selectedClassId)) {
           classIds.push(selectedClassId);
+        }
+        if (classIds.length === 0 && selectedClassId) {
+          classIds = [selectedClassId];
         }
 
         return {
@@ -170,6 +230,16 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
           notes: r.notes || '',
         };
       });
+
+      // Strict validation: every student must have enrolledClassIds
+      const hasUnenrolled = studentsToInsert.some(
+        (s) => !s.enrolledClassIds || s.enrolledClassIds.length === 0
+      );
+      if (hasUnenrolled) {
+        setError('Bắt buộc phải chọn Lớp học cho toàn bộ học sinh.');
+        setIsSaving(false);
+        return;
+      }
 
       await addBatchStudents(studentsToInsert);
 
@@ -201,11 +271,10 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                Nhập Danh Sách Học Sinh Từ Excel
+                Nhập Danh Sách Học Sinh (Excel / Dán Tên)
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-500">
-                Tải lên file danh sách hoặc dán nhanh. Các trường dữ liệu là{' '}
-                <strong className="text-emerald-700 font-semibold">không yêu cầu bắt buộc</strong>.
+                Tải lên file danh sách hoặc dán nhanh. <strong className="text-red-600 font-semibold">Bắt buộc phải chọn Lớp học</strong> để gán cho học sinh.
               </p>
             </div>
           </div>
@@ -218,33 +287,45 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
           </button>
         </div>
 
-        {/* Configuration Row: Select Class & School to Assign */}
-        <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs shrink-0">
-          <div>
-            <label className="font-bold text-slate-700 flex items-center space-x-1 mb-1">
-              <Layers className="w-3.5 h-3.5 text-blue-600" />
-              <span>Gán vào Lớp dạy thêm (tùy chọn):</span>
+        {/* Configuration Row: Select Class (MANDATORY) & School to Assign */}
+        <div className="bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs shrink-0">
+          <div className={`p-2.5 rounded-xl border transition-all ${!selectedClassId ? 'bg-red-50/40 border-red-300 ring-2 ring-red-100' : 'bg-white border-blue-200 shadow-2xs'}`}>
+            <label className="font-bold text-slate-800 flex items-center space-x-1.5 mb-1.5">
+              <Layers className="w-4 h-4 text-blue-600" />
+              <span>Gán vào Lớp học:</span>
+              <span className="text-red-500 font-bold">*</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 uppercase">
+                Bắt buộc
+              </span>
             </label>
             <select
               value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="w-full border border-slate-300 rounded-xl p-2 bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-hidden"
+              onChange={(e) => handleClassChange(e.target.value)}
+              className={`w-full border rounded-xl p-2 bg-white text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-hidden ${
+                !selectedClassId ? 'border-red-400 text-red-600' : 'border-slate-300'
+              }`}
             >
-              <option value="">-- Không gán mặc định (lấy theo file Excel) --</option>
+              <option value="">-- Vui lòng chọn Lớp học (Bắt buộc) --</option>
               {classes.map((cls) => (
                 <option key={cls.id} value={cls.id}>
-                  {cls.name}
+                  {cls.name} ({cls.subject})
                 </option>
               ))}
             </select>
-            <span className="text-[11px] text-slate-400 mt-0.5 block">
-              Tất cả học sinh được import sẽ được tự động gán vào lớp này (nếu chọn).
-            </span>
+            {!selectedClassId ? (
+              <span className="text-[11px] text-red-600 font-semibold mt-1 block">
+                ⚠️ Bắt buộc phải chọn Lớp học trước khi tải file hoặc dán danh sách.
+              </span>
+            ) : (
+              <span className="text-[11px] text-blue-700 font-medium mt-1 block">
+                ✓ Tất cả học sinh sẽ được gán vào lớp: <strong>{classes.find((c) => c.id === selectedClassId)?.name}</strong>
+              </span>
+            )}
           </div>
 
-          <div>
-            <label className="font-bold text-slate-700 flex items-center space-x-1 mb-1">
-              <Building className="w-3.5 h-3.5 text-indigo-600" />
+          <div className="p-2.5 rounded-xl border border-slate-200 bg-white">
+            <label className="font-bold text-slate-700 flex items-center space-x-1.5 mb-1.5">
+              <Building className="w-4 h-4 text-indigo-600" />
               <span>Trường phổ thông mặc định (tùy chọn):</span>
             </label>
             <select
@@ -259,7 +340,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
                 </option>
               ))}
             </select>
-            <span className="text-[11px] text-slate-400 mt-0.5 block">
+            <span className="text-[11px] text-slate-400 mt-1 block">
               Để trống nếu không muốn tự động thêm trường phổ thông.
             </span>
           </div>
@@ -359,9 +440,21 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Dán danh sách tên học sinh (mỗi học sinh 1 dòng):
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 block">
+                    Dán danh sách tên học sinh (mỗi học sinh 1 dòng):
+                  </label>
+                  {selectedClassId ? (
+                    <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg flex items-center space-x-1">
+                      <span>Gán vào lớp:</span>
+                      <strong className="text-blue-900">{classes.find((c) => c.id === selectedClassId)?.name}</strong>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-lg">
+                      ⚠️ Bắt buộc chọn lớp ở trên trước
+                    </span>
+                  )}
+                </div>
                 <textarea
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
@@ -378,7 +471,9 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
                 <button
                   type="button"
                   onClick={handleParsePastedText}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center space-x-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  disabled={!selectedClassId}
+                  title={!selectedClassId ? 'Vui lòng chọn Lớp học ở phía trên trước' : 'Trích xuất danh sách học sinh'}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Trích xuất danh sách</span>
@@ -532,7 +627,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
 
           <button
             type="button"
-            disabled={previewRows.length === 0 || isSaving}
+            disabled={previewRows.length === 0 || isSaving || !selectedClassId}
             onClick={handleConfirmImport}
             className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center space-x-2 cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >

@@ -55,6 +55,7 @@ export const StudentManager: React.FC = () => {
   const [parentEmail, setParentEmail] = useState('');
   const [enrolledClasses, setEnrolledClasses] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const filteredStudents = students.filter((s) => {
     const term = searchTerm.toLowerCase();
@@ -123,7 +124,17 @@ export const StudentManager: React.FC = () => {
 
   const handleCreateStudent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim()) return;
+    if (!fullName.trim()) {
+      setCreateError('Vui lòng nhập họ và tên học sinh.');
+      return;
+    }
+
+    if (enrolledClasses.length === 0) {
+      setCreateError('Bắt buộc phải chọn ít nhất một Lớp học để gán cho học sinh.');
+      return;
+    }
+
+    setCreateError(null);
 
     const isNoSchool = !schoolId || schoolId.trim() === '';
     const selectedSch = !isNoSchool ? schools.find((sch) => sch.id === schoolId) : null;
@@ -165,6 +176,7 @@ export const StudentManager: React.FC = () => {
     setParentPhone('');
     setParentEmail('');
     setNotes('');
+    setCreateError(null);
   };
 
   return (
@@ -172,7 +184,12 @@ export const StudentManager: React.FC = () => {
       {/* Header & Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Quản Lý Học Sinh & Phụ Huynh</h2>
+          <div className="flex items-center space-x-2.5">
+            <h2 className="text-xl font-bold text-slate-900">Quản Lý Học Sinh & Phụ Huynh</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              {filteredStudents.length} học sinh
+            </span>
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
             Quản lý hồ sơ, lớp theo học, phụ huynh liên hệ và tra cứu lịch sử học tập & học phí.
           </p>
@@ -210,7 +227,9 @@ export const StudentManager: React.FC = () => {
             type="button"
             onClick={() => {
               setSchoolId(schools[0]?.id || '');
-              setEnrolledClasses(classes[0] ? [classes[0].id] : []);
+              const initialClass = selectedClassId !== 'ALL' ? [selectedClassId] : (classes[0] ? [classes[0].id] : []);
+              setEnrolledClasses(initialClass);
+              setCreateError(null);
               setShowCreateModal(true);
             }}
             className="inline-flex items-center space-x-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
@@ -357,6 +376,42 @@ export const StudentManager: React.FC = () => {
 
       {/* Student List Table */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* Table Top Header Bar with Dynamic Total Count */}
+        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center space-x-2">
+            <Users className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-bold text-slate-700">
+              Tổng số học sinh trong danh sách:
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+              {filteredStudents.length} học sinh
+            </span>
+            {filteredStudents.length !== students.length && (
+              <span className="text-[11px] text-slate-500 font-medium">
+                (Đang lọc từ tổng số {students.length} học sinh)
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2 text-xs">
+            {selectedSchoolCode !== 'ALL' && (
+              <span className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold">
+                Trường: {selectedSchoolCode === 'NONE' ? 'Chưa cập nhật' : schools.find(s => s.code === selectedSchoolCode)?.name || selectedSchoolCode}
+              </span>
+            )}
+            {selectedClassId !== 'ALL' && (
+              <span className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold">
+                Lớp: {classes.find(c => c.id === selectedClassId)?.name || selectedClassId}
+              </span>
+            )}
+            {searchTerm.trim() && (
+              <span className="px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-semibold">
+                Tìm kiếm: "{searchTerm.trim()}"
+              </span>
+            )}
+          </div>
+        </div>
+
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
@@ -739,10 +794,19 @@ export const StudentManager: React.FC = () => {
               Thêm học sinh mới
             </h3>
 
+            {createError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                <span className="font-semibold">{createError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleCreateStudent} className="mt-4 space-y-3.5 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2">
-                  <label className="font-bold text-slate-700 block mb-1">Họ và tên học sinh:</label>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Họ và tên học sinh <span className="text-red-500 font-bold">*</span>:
+                  </label>
                   <input
                     type="text"
                     value={fullName}
@@ -835,8 +899,29 @@ export const StudentManager: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Gán vào lớp dạy thêm:</label>
-                <div className="space-y-1 max-h-32 overflow-y-auto p-2 border border-slate-200 rounded-xl bg-slate-50">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 flex items-center space-x-1">
+                    <span>Gán vào Lớp học:</span>
+                    <span className="text-red-500 font-bold">*</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 uppercase">
+                      Bắt buộc
+                    </span>
+                  </label>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    {enrolledClasses.length > 0 ? (
+                      <span className="text-blue-600 font-bold">{enrolledClasses.length} lớp đã chọn</span>
+                    ) : (
+                      <span className="text-red-500 font-bold">Chưa chọn lớp</span>
+                    )}
+                  </span>
+                </div>
+                <div
+                  className={`space-y-1 max-h-36 overflow-y-auto p-2 border rounded-xl bg-slate-50 ${
+                    enrolledClasses.length === 0
+                      ? 'border-red-300 ring-2 ring-red-100 bg-red-50/20'
+                      : 'border-slate-200'
+                  }`}
+                >
                   {classes.map((cls) => {
                     const isChecked = enrolledClasses.includes(cls.id);
                     return (
@@ -847,6 +932,7 @@ export const StudentManager: React.FC = () => {
                           onChange={(e) => {
                             if (e.target.checked) {
                               setEnrolledClasses([...enrolledClasses, cls.id]);
+                              setCreateError(null);
                             } else {
                               setEnrolledClasses(enrolledClasses.filter((id) => id !== cls.id));
                             }
@@ -858,6 +944,11 @@ export const StudentManager: React.FC = () => {
                     );
                   })}
                 </div>
+                {enrolledClasses.length === 0 && (
+                  <p className="text-[11px] text-red-600 font-medium mt-1">
+                    ⚠️ Bắt buộc phải chọn ít nhất một lớp học cho học sinh này.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -903,6 +994,7 @@ export const StudentManager: React.FC = () => {
       <StudentExcelImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+        initialClassId={selectedClassId !== 'ALL' ? selectedClassId : (classes[0]?.id || '')}
         onSuccess={(count) => {
           setImportSuccessMessage(`Đã nhập thành công ${count} học sinh vào hệ thống!`);
           setTimeout(() => setImportSuccessMessage(null), 6000);

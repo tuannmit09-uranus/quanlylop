@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Calendar,
   FileText,
+  Clock,
 } from 'lucide-react';
 import { VietQRModal } from './VietQRModal';
 import { TuitionPdfExportModal } from './TuitionPdfExportModal';
@@ -94,29 +95,71 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
 
   const currentTenantClassIds = new Set(classes.map((c) => c.id));
-  const filteredTuitions = tuitionItems.filter((t) => {
-    // 1. Strict Tenant Isolation: item MUST belong to current active tenant
+
+  // 1. Scoped tuitions: Fixed set of tuitions for selected month/year/school/class where sessionCount > 0
+  // Card metrics (Doanh thu dự kiến, Đã thu, Chưa nộp) are strictly computed from scopedTuitions
+  // so they DO NOT change when the user selects different status filters (Chưa nộp, Đã nộp, Nộp một phần)
+  const scopedTuitions = tuitionItems.filter((t) => {
+    // 1. Strict Tenant Isolation
     if (!currentTenant?.id || t.tenant_id !== currentTenant.id) return false;
 
-    // 2. Strict Class Isolation: item must belong to one of current tenant's active classes
+    // 2. Strict Class Isolation
     if (currentTenantClassIds.size > 0 && (!t.classId || !currentTenantClassIds.has(t.classId))) return false;
 
-    const matchesMonth = t.periodMonth === selectedMonth && t.periodYear === selectedYear;
-    const matchesSchool = selectedSchool === 'ALL' || t.schoolCode === selectedSchool;
-    const matchesClass = selectedClassId === 'ALL' || t.classId === selectedClassId;
-    const matchesStatus = selectedStatus === 'ALL' || t.status === selectedStatus;
-    const matchesSearch =
-      t.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.paymentReference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.className.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesMonth && matchesSchool && matchesClass && matchesStatus && matchesSearch;
+    // 3. Month & Year
+    if (t.periodMonth !== selectedMonth || t.periodYear !== selectedYear) return false;
+
+    // 4. School filter
+    if (selectedSchool !== 'ALL' && t.schoolCode !== selectedSchool) return false;
+
+    // 5. Class filter
+    if (selectedClassId !== 'ALL' && t.classId !== selectedClassId) return false;
+
+    // 6. Only list students with fee-eligible sessionCount > 0
+    if ((t.sessionCount || 0) <= 0) return false;
+
+    return true;
   });
 
-  const totalExpected = filteredTuitions.reduce((acc, cur) => acc + cur.totalAmount, 0);
-  const totalCollected = filteredTuitions
-    .filter((t) => t.status === 'paid')
-    .reduce((acc, cur) => acc + (cur.paidAmount || cur.totalAmount), 0);
-  const totalUnpaid = totalExpected - totalCollected;
+  // Fixed Card KPIs based strictly on school/class/month/year scope:
+  const totalExpected = scopedTuitions.reduce((acc, cur) => acc + cur.totalAmount, 0);
+  const paidTuitions = scopedTuitions.filter((t) => t.status === 'paid');
+  const totalCollected = paidTuitions.reduce(
+    (acc, cur) => acc + (cur.paidAmount || cur.totalAmount),
+    0
+  );
+  const unpaidTuitions = scopedTuitions.filter((t) => t.status !== 'paid');
+  const totalUnpaid = Math.max(0, totalExpected - totalCollected);
+  const unpaidCount = unpaidTuitions.length;
+
+  // 2. Filtered tuitions for the Table / List: applies selectedStatus & searchTerm
+  const filteredTuitions = scopedTuitions.filter((t) => {
+    // Trạng thái filter (Chưa nộp matches both 'unpaid' and 'draft')
+    const matchesStatus =
+      selectedStatus === 'ALL'
+        ? true
+        : selectedStatus === 'unpaid'
+        ? t.status === 'unpaid' || t.status === 'draft'
+        : selectedStatus === 'paid'
+        ? t.status === 'paid'
+        : selectedStatus === 'partial'
+        ? t.status === 'partial'
+        : t.status === selectedStatus;
+
+    if (!matchesStatus) return false;
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      const matchesSearch =
+        (t.studentName || '').toLowerCase().includes(q) ||
+        (t.paymentReference || '').toLowerCase().includes(q) ||
+        (t.className || '').toLowerCase().includes(q) ||
+        (t.schoolCode || '').toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+    }
+
+    return true;
+  });
 
   const [toastMessage, setToastMessage] = useState<{ title: string; desc: string } | null>(null);
 
@@ -238,7 +281,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
           <span className="text-xs font-semibold text-slate-500">Tổng doanh thu dự kiến (T{selectedMonth})</span>
           <p className="text-2xl font-black text-slate-900 mt-1">{formatVND(totalExpected)}</p>
           <span className="text-[11px] text-slate-400 mt-0.5 block">
-            {filteredTuitions.length} khoản học phí cần thu
+            {scopedTuitions.length} học sinh có số buổi tính phí &gt; 0
           </span>
         </div>
 
@@ -246,7 +289,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
           <span className="text-xs font-semibold text-slate-500">Đã thu qua ngân hàng / tiền mặt</span>
           <p className="text-2xl font-black text-emerald-600 mt-1">{formatVND(totalCollected)}</p>
           <span className="text-[11px] text-emerald-600 font-semibold mt-0.5 block">
-            Đã hoàn tất {filteredTuitions.filter((t) => t.status === 'paid').length} học sinh
+            Đã hoàn tất {paidTuitions.length} học sinh
           </span>
         </div>
 
@@ -254,7 +297,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
           <span className="text-xs font-semibold text-slate-500">Chưa nộp học phí</span>
           <p className="text-2xl font-black text-amber-600 mt-1">{formatVND(totalUnpaid)}</p>
           <span className="text-[11px] text-amber-700 font-semibold mt-0.5 block">
-            {filteredTuitions.filter((t) => t.status === 'unpaid' || t.status === 'partial').length} học sinh cần thu
+            {unpaidCount} học sinh cần thu
           </span>
         </div>
       </div>
@@ -374,36 +417,97 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
 
       {/* Tuition Table or Empty State */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        {filteredTuitions.length === 0 ? (
-          <div className="p-12 text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-              <CreditCard className="w-7 h-7" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Chưa có dữ liệu bảng kê cho Tháng {selectedMonth}/{selectedYear}
-                {selectedClassId !== 'ALL' ? ` (${classes.find((c) => c.id === selectedClassId)?.name})` : ''}
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-                Không tìm thấy bảng kê học phí cho kỳ thu này {selectedClassId !== 'ALL' ? 'thuộc lớp đã chọn' : ''}. Bạn có thể nhấn nút dưới đây để hệ thống tự động tổng hợp số buổi học và tạo bảng kê.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleCalculateTuition}
-              disabled={isCalculating}
-              className="inline-flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>
-                {isCalculating
-                  ? 'Đang xử lý...'
-                  : selectedClassId !== 'ALL'
-                  ? `Tự động tính bảng kê ${classes.find((c) => c.id === selectedClassId)?.name || 'lớp này'} (T${selectedMonth}/${selectedYear})`
-                  : `Tự động tính bảng kê Tháng ${selectedMonth}/${selectedYear}`}
+        {/* Table Top Header Bar with Dynamic Total Count */}
+        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Danh sách học sinh tính phí Tháng {selectedMonth}/{selectedYear}
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
+              Tổng số: {filteredTuitions.length} học sinh
+            </span>
+            {selectedStatus !== 'ALL' && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
+                Lọc: {selectedStatus === 'unpaid' ? 'Chưa nộp' : selectedStatus === 'paid' ? 'Đã nộp' : 'Nộp một phần'}
               </span>
-            </button>
+            )}
+            {selectedClassId !== 'ALL' && (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                {classes.find((c) => c.id === selectedClassId)?.name}
+              </span>
+            )}
+            {selectedSchool !== 'ALL' && (
+              <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[11px] font-bold">
+                Trường: {selectedSchool}
+              </span>
+            )}
           </div>
+
+          <div className="text-xs text-slate-500 font-medium">
+            {scopedTuitions.length !== filteredTuitions.length ? (
+              <span>
+                Hiển thị <strong className="text-slate-800">{filteredTuitions.length}</strong> / {scopedTuitions.length} học sinh theo bộ lọc
+              </span>
+            ) : (
+              <span>Toàn bộ {scopedTuitions.length} học sinh tính phí</span>
+            )}
+          </div>
+        </div>
+
+        {filteredTuitions.length === 0 ? (
+          scopedTuitions.length === 0 ? (
+            <div className="p-12 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                <CreditCard className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Chưa có dữ liệu bảng kê cho Tháng {selectedMonth}/{selectedYear}
+                  {selectedClassId !== 'ALL' ? ` (${classes.find((c) => c.id === selectedClassId)?.name})` : ''}
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                  Không tìm thấy học sinh nào có số buổi tính phí &gt; 0 trong kỳ thu này {selectedClassId !== 'ALL' ? 'thuộc lớp đã chọn' : ''}. Bạn có thể nhấn nút dưới đây để hệ thống tự động tổng hợp số buổi học và tạo bảng kê.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCalculateTuition}
+                disabled={isCalculating}
+                className="inline-flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>
+                  {isCalculating
+                    ? 'Đang xử lý...'
+                    : selectedClassId !== 'ALL'
+                    ? `Tự động tính bảng kê ${classes.find((c) => c.id === selectedClassId)?.name || 'lớp này'} (T${selectedMonth}/${selectedYear})`
+                    : `Tự động tính bảng kê Tháng ${selectedMonth}/${selectedYear}`}
+                </span>
+              </button>
+            </div>
+          ) : (
+            <div className="p-10 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                <Filter className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800">
+                Không tìm thấy học sinh nào phù hợp bộ lọc
+              </h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Không có học sinh nào thỏa mãn trạng thái "{selectedStatus === 'unpaid' ? 'Chưa nộp' : selectedStatus === 'paid' ? 'Đã nộp' : selectedStatus}" hoặc từ khóa tìm kiếm.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStatus('ALL');
+                  setSearchTerm('');
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                ✕ Đặt lại bộ lọc trạng thái (Hiện {scopedTuitions.length} học sinh)
+              </button>
+            </div>
+          )
         ) : (
           <>
             {/* Desktop Table View (>= 768px) */}
@@ -472,15 +576,20 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                       className={`px-2.5 py-1 rounded-full text-xs font-bold inline-flex items-center space-x-1 ${
                         tui.status === 'paid'
                           ? 'bg-emerald-100 text-emerald-800'
-                          : tui.status === 'unpaid'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-blue-100 text-blue-800'
+                          : tui.status === 'partial'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-amber-100 text-amber-800'
                       }`}
                     >
                       {tui.status === 'paid' ? (
                         <>
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Đã nộp</span>
+                        </>
+                      ) : tui.status === 'partial' ? (
+                        <>
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Nộp một phần</span>
                         </>
                       ) : (
                         <>
@@ -549,6 +658,8 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                   className={`px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 flex items-center space-x-1 ${
                     tui.status === 'paid'
                       ? 'bg-emerald-100 text-emerald-800'
+                      : tui.status === 'partial'
+                      ? 'bg-blue-100 text-blue-800'
                       : 'bg-amber-100 text-amber-800'
                   }`}
                 >
@@ -556,6 +667,11 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                     <>
                       <CheckCircle2 className="w-3 h-3" />
                       <span>Đã nộp</span>
+                    </>
+                  ) : tui.status === 'partial' ? (
+                    <>
+                      <Clock className="w-3 h-3" />
+                      <span>Nộp 1 phần</span>
                     </>
                   ) : (
                     <>

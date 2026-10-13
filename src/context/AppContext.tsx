@@ -802,7 +802,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 sessionCount: studentSessionCount,
                 totalAmount,
                 paidAmount: 0,
-                status: 'draft',
+                status: 'unpaid',
                 paymentReference,
                 created_at: new Date().toISOString().split('T')[0],
                 updated_at: new Date().toISOString().split('T')[0],
@@ -3040,7 +3040,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             sessionCount,
             totalAmount,
             paidAmount: 0,
-            status: 'draft',
+            status: 'unpaid',
             paymentReference,
             created_at: new Date().toISOString().split('T')[0],
             updated_at: new Date().toISOString().split('T')[0],
@@ -3078,7 +3078,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nowStr = new Date().toISOString().split('T')[0];
     setTuitionItems((prev) =>
       prev.map((t) => {
-        if (t.tenant_id === currentTenant.id && t.periodMonth === month && t.periodYear === year && t.status === 'draft') {
+        if (t.tenant_id === currentTenant.id && t.periodMonth === month && t.periodYear === year && (t.status === 'draft' || t.status === 'unpaid')) {
           const lockedItem: TuitionItem = {
             ...t,
             status: 'unpaid',
@@ -3172,7 +3172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Bank Statements & Automated Reconciliation
+  // Bank Statements & Automated Reconciliation with Smart Deduplication
   const importBankStatement = (
     month: number,
     year: number,
@@ -3195,35 +3195,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'imported',
     };
 
-    const newTransactions: BankTransaction[] = txns.map((t, idx) => ({
-      ...t,
-      id: `txn-${Date.now()}-${idx}`,
-      tenant_id: currentTenant.id,
-      statementId,
-      statementMonth: month,
-      statementYear: year,
-      stt: t.stt || (idx + 1),
-      reconciliationStatus: t.reconciliationStatus || 'unmatched',
-    }));
-
     if (overwrite) {
-      // Replace existing statements and transactions for this month/year
+      // Find old transactions of this month/year to remove from Firestore and replace cleanly
+      const oldMonthTxns = bankTransactions.filter(
+        (tx) => tx.tenant_id === currentTenant.id && tx.statementMonth === month && tx.statementYear === year
+      );
+      oldMonthTxns.forEach((tx) => syncDeleteFromFirestore('bankTransactions', tx.id));
+
+      const newTransactions: BankTransaction[] = txns.map((t, idx) => ({
+        ...t,
+        id: `txn-${Date.now()}-${idx}`,
+        tenant_id: currentTenant.id,
+        statementId,
+        statementMonth: month,
+        statementYear: year,
+        stt: t.stt || (idx + 1),
+        reconciliationStatus: t.reconciliationStatus || 'unmatched',
+      }));
+
       setBankStatements((prev) => [
         newStatement,
-        ...prev.filter((s) => !(s.month === month && s.year === year)),
+        ...prev.filter((s) => !(s.tenant_id === currentTenant.id && s.month === month && s.year === year)),
       ]);
       setBankTransactions((prev) => [
         ...newTransactions,
-        ...prev.filter((tx) => !(tx.statementMonth === month && tx.statementYear === year)),
+        ...prev.filter((tx) => !(tx.tenant_id === currentTenant.id && tx.statementMonth === month && tx.statementYear === year)),
       ]);
-    } else {
-      // Append
-      setBankStatements((prev) => [newStatement, ...prev]);
-      setBankTransactions((prev) => [...newTransactions, ...prev]);
-    }
 
-    syncSaveToFirestore('bankStatements', statementId, newStatement);
-    newTransactions.forEach((tx) => syncSaveToFirestore('bankTransactions', tx.id, tx));
+      syncSaveToFirestore('bankStatements', statementId, newStatement);
+      newTransactions.forEach((tx) => syncSaveToFirestore('bankTransactions', tx.id, tx));
+    } else {
+      // SMART DEDUPLICATION (Không bao giờ bị double giao dịch khi import tiếp):
+      // Check existing transactions of this month/year by unique fingerprint
+      const existingMonthTxns = bankTransactions.filter(
+        (tx) => tx.tenant_id === currentTenant.id && tx.statementMonth === month && tx.statementYear === year
+      );
+
+      const getFp = (t: { docNo?: string; transactionDate?: string; amount: number; description?: string }) => {
+        if (t.docNo && t.docNo.trim().length > 3) {
+          return `doc:${t.docNo.trim().toUpperCase()}`;
+        }
+        return `raw:${(t.transactionDate || '').trim()}_${Number(t.amount || 0)}_${normalizeBankMemo(t.description || '')}`;
+      };
+
+      const existingFpMap = new Map<string, BankTransaction>();
+      existingMonthTxns.forEach((tx) => {
+        existingFpMap.set(getFp(tx), tx);
+      });
+
+      const newlyAddedTxns: BankTransaction[] = [];
+
+      txns.forEach((incoming, idx) => {
+        const fp = getFp(incoming);
+        if (existingFpMap.has(fp)) {
+          // Already exists: DO NOT duplicate, preserve existing transaction and its matched status!
+          return;
+        }
+
+        // New transaction: append with unique ID
+        const newTxn: BankTransaction = {
+          ...incoming,
+          id: `txn-${Date.now()}-${idx}`,
+          tenant_id: currentTenant.id,
+          statementId,
+          statementMonth: month,
+          statementYear: year,
+          stt: incoming.stt || (existingMonthTxns.length + newlyAddedTxns.length + 1),
+          reconciliationStatus: incoming.reconciliationStatus || 'unmatched',
+        };
+        newlyAddedTxns.push(newTxn);
+        existingFpMap.set(fp, newTxn); // Prevent intra-file duplicates
+      });
+
+      setBankStatements((prev) => [
+        newStatement,
+        ...prev.filter((s) => !(s.tenant_id === currentTenant.id && s.month === month && s.year === year)),
+      ]);
+      setBankTransactions((prev) => [...newlyAddedTxns, ...prev]);
+
+      syncSaveToFirestore('bankStatements', statementId, newStatement);
+      newlyAddedTxns.forEach((tx) => syncSaveToFirestore('bankTransactions', tx.id, tx));
+    }
 
     addAuditLog(
       'create',
@@ -3311,16 +3363,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Track claimed tuitions so each tuition item is matched at most once (1-to-1 matching)
     const claimedTuitionIds = new Set<string>();
 
-    // Lock in tuitions already claimed by manual matching
+    // Lock in tuitions already claimed by manual matching OR previously confirmed matches
     targetTxns.forEach((tx) => {
-      if (tx.reconciliationStatus === 'manual_matched' && tx.matchedTuitionId) {
+      if (
+        (tx.reconciliationStatus === 'manual_matched' || tx.reconciliationStatus === 'matched') &&
+        tx.matchedTuitionId
+      ) {
         claimedTuitionIds.add(tx.matchedTuitionId);
       }
     });
 
     targetTxns.forEach((txn) => {
-      // Do not overwrite manual matches confirmed by the user
-      if (txn.reconciliationStatus === 'manual_matched') return;
+      // Do not overwrite or modify matches already confirmed previously
+      if (txn.reconciliationStatus === 'manual_matched' || txn.reconciliationStatus === 'matched') return;
 
       const rawDesc = txn.description || '';
       const cleanDesc = rawDesc.toUpperCase();
@@ -3367,35 +3422,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return false;
       });
 
-      // Strategy 2: If NO payment reference found, ONLY match by unambiguous multi-word student full name
-      // NEVER match loose single words (e.g. "khoa" inside "chuyen khoan", "nguyen" inside beneficiary name)
+      // Strategy 2: If NO payment reference found, ONLY match when memo explicitly mentions
+      // BOTH the student name AND tuition context keywords (e.g. "hoc phi", "tien hoc", "dong tien", "thang")
       if (matchedTuitionIndex < 0) {
         const cleanedMemo = unaccentedDesc
           .replace(/nguyen minh tuan/g, ' ')
           .replace(/tong thi nga/g, ' ')
           .replace(/chuyen khoan|chuyen tien|tai khoan|ngan hang|vietcombank|techcombank|mbbank|vietinbank|agribank|bidv|sacombank|vpbank|napas|zalo/g, ' ');
 
-        matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
-          if (tui.tenant_id !== currentTenant.id) return false;
-          if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-          if (claimedTuitionIds.has(tui.id)) return false;
+        const hasTuitionKeyword = /(hoc phi|tien hoc|hp|dong hoc|dong tien|nop tien|nop hoc|thang|con|lop)/i.test(unaccentedDesc);
 
-          const student = students.find((s) => s.id === tui.studentId && s.tenant_id === currentTenant.id);
-          if (!student) return false;
+        if (hasTuitionKeyword) {
+          matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
+            if (tui.tenant_id !== currentTenant.id) return false;
+            if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
+            if (claimedTuitionIds.has(tui.id)) return false;
 
-          const sClean = removeVietnameseAccents(student.fullName.trim()).toLowerCase();
-          const words = sClean.split(/\s+/).filter(Boolean);
+            const student = students.find((s) => s.id === tui.studentId && s.tenant_id === currentTenant.id);
+            if (!student) return false;
 
-          // Require at least 2 words (e.g. "vu thuy linh", "gia hung", "duc anh")
-          if (words.length >= 2) {
-            const twoWord = words.slice(-2).join(' ');
-            const fullWord = words.join(' ');
-            if (twoWord.length >= 6 && (cleanedMemo.includes(fullWord) || cleanedMemo.includes(twoWord))) {
-              if (txn.amount === tui.totalAmount) return true;
+            const sClean = removeVietnameseAccents(student.fullName.trim()).toLowerCase();
+            const words = sClean.split(/\s+/).filter(Boolean);
+
+            // Require student name match
+            if (words.length >= 2) {
+              const twoWord = words.slice(-2).join(' ');
+              const fullWord = words.join(' ');
+              if (cleanedMemo.includes(fullWord) || (twoWord.length >= 6 && cleanedMemo.includes(twoWord))) {
+                if (txn.amount === tui.totalAmount) return true;
+              }
             }
-          }
-          return false;
-        });
+            return false;
+          });
+        }
       }
 
       const txnIdx = updatedTxns.findIndex((tx) => tx.id === txn.id);

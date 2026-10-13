@@ -585,7 +585,7 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
                           <div className="space-y-1">
                             <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                               <CheckCircle2 className="w-3 h-3" />
-                              <span>{tx.reconciliationStatus === 'manual_matched' ? 'Khớp thủ công' : 'Khớp 100%'}</span>
+                              <span>{tx.reconciliationStatus === 'manual_matched' ? 'Khớp thủ công' : 'Khớp nội dung & tiền'}</span>
                             </span>
                             {tx.matchedStudentName && (
                               <div>

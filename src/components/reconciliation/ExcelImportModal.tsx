@@ -199,22 +199,27 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs text-slate-600">
-            <label className="flex items-center space-x-2 cursor-pointer select-none">
-              <input
-                id="overwrite-checkbox"
-                type="checkbox"
-                checked={overwrite}
-                onChange={(e) => setOverwrite(e.target.checked)}
-                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-              />
-              <span className="font-medium text-slate-700">
-                Ghi đè dữ liệu sao kê của Tháng {importMonth}/{importYear} nếu đã tồn tại
+          <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-slate-600">
+              <label className="flex items-center space-x-2 cursor-pointer select-none">
+                <input
+                  id="overwrite-checkbox"
+                  type="checkbox"
+                  checked={overwrite}
+                  onChange={(e) => setOverwrite(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                />
+                <span className="font-semibold text-slate-700">
+                  Ghi đè toàn bộ (Làm mới hoàn toàn sao kê Tháng {importMonth}/{importYear})
+                </span>
+              </label>
+              <span className="text-[11px] text-slate-400">
+                * Nhận diện 4 cột: STT, Ngày, Số tiền, Nội dung
               </span>
-            </label>
-            <span className="text-[11px] text-slate-400">
-              * Hệ thống nhận diện 4 cột: STT, Ngày, Số tiền, Nội dung
-            </span>
+            </div>
+            <p className="text-[11px] text-emerald-700 bg-emerald-50/80 px-2.5 py-1 rounded-lg border border-emerald-200/50">
+              ✓ <strong>Chế độ tự động chống trùng lặp (Mặc định):</strong> Khi import bổ sung, hệ thống tự động nhận diện các giao dịch đã có, chỉ thêm các giao dịch mới phát sinh và giữ nguyên 100% các kết quả đã đối soát trước đó (không lo bị double).
+            </p>
           </div>
         </div>
 

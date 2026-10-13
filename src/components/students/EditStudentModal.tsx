@@ -112,6 +112,11 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
       return;
     }
 
+    if (enrolledClassIds.length === 0) {
+      setErrorMessage('Bắt buộc phải chọn ít nhất một Lớp học cho học sinh');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -397,11 +402,26 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
             <div className="flex items-center justify-between">
               <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center space-x-1.5 text-purple-700">
                 <Layers className="w-3.5 h-3.5" />
-                <span>4. Đăng ký lớp học thêm ({enrolledClassIds.length} lớp đã chọn)</span>
+                <span>
+                  4. Đăng ký lớp học thêm <span className="text-red-500 font-bold">*</span> (Bắt buộc)
+                </span>
               </h4>
+              <span className="text-[11px] font-semibold text-slate-500">
+                {enrolledClassIds.length > 0 ? (
+                  <span className="text-blue-600 font-bold">{enrolledClassIds.length} lớp đã chọn</span>
+                ) : (
+                  <span className="text-red-500 font-bold">Chưa chọn lớp</span>
+                )}
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-2.5 border border-slate-200 rounded-2xl bg-slate-50">
+            <div
+              className={`grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-2.5 border rounded-2xl bg-slate-50 ${
+                enrolledClassIds.length === 0
+                  ? 'border-red-300 ring-2 ring-red-100 bg-red-50/20'
+                  : 'border-slate-200'
+              }`}
+            >
               {classes.map((cls) => {
                 const isChecked = enrolledClassIds.includes(cls.id);
                 return (
@@ -429,6 +449,11 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
                 );
               })}
             </div>
+            {enrolledClassIds.length === 0 && (
+              <p className="text-[11px] text-red-600 font-medium">
+                ⚠️ Bắt buộc phải chọn ít nhất một lớp học cho học sinh này.
+              </p>
+            )}
           </div>
 
           {/* Section 5: Ghi chú sư phạm */}
