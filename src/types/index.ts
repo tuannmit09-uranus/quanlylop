@@ -313,6 +313,8 @@ export interface TuitionItem {
   paidAt?: string;
   bankTransactionId?: string;
   qrUrl?: string;
+  lastReminderSentAt?: string; // ISO string when tuition payment reminder was sent to parent
+  lastReminderChannel?: 'zalo' | 'email' | 'both';
   created_at: string;
   updated_at: string;
 }

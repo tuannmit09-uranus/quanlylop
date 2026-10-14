@@ -3,7 +3,8 @@ import { TenantSettingsPage } from './TenantSettingsPage';
 import { PaymentSettingsPage } from './PaymentSettingsPage';
 import { AuditLogPage } from './AuditLogPage';
 import { FirestoreDatabasePage } from './FirestoreDatabasePage';
-import { Building, ShieldAlert, CreditCard, Database, FileDown } from 'lucide-react';
+import { Building, ShieldAlert, CreditCard, Database, FileDown, BookOpen } from 'lucide-react';
+import { UserGuideModal } from '../common/UserGuideModal';
 
 export type SettingsTabId = 'tenant-settings' | 'payment-settings' | 'audit-logs' | 'firestore-db';
 
@@ -19,6 +20,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onTabChange,
 }) => {
   const [currentTab, setCurrentTab] = useState<SettingsTabId>(controlledTab || initialTab);
+
+  const [showGuideModal, setShowGuideModal] = useState<boolean>(false);
 
   // Sync state whenever prop changes
   useEffect(() => {
@@ -90,15 +93,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <span>Nhật ký Audit Log</span>
         </button>
 
-        <a
-          href="/Huong_Dan_Su_Dung_EduTutor_Pro.docx"
-          download="Huong_Dan_Su_Dung_EduTutor_Pro.docx"
-          className="ml-auto flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer shadow-xs"
-          title="Tải về toàn bộ tài liệu hướng dẫn sử dụng file Word (.docx) kèm ảnh minh họa"
+        <button
+          type="button"
+          onClick={() => setShowGuideModal(true)}
+          className="ml-auto flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-all cursor-pointer shadow-xs"
+          title="Xem tài liệu hướng dẫn sử dụng, tải file PDF và video hướng dẫn trích xuất sao kê"
         >
-          <FileDown className="w-4 h-4 text-emerald-600" />
-          <span>Tải Sổ tay HDSD (.docx)</span>
-        </a>
+          <BookOpen className="w-4 h-4 text-blue-600" />
+          <span>Sổ tay HDSD & Video (.pdf)</span>
+        </button>
       </div>
 
       {/* Render Selected Component */}
@@ -108,6 +111,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       {currentTab === 'payment-settings' && <PaymentSettingsPage />}
       {currentTab === 'firestore-db' && <FirestoreDatabasePage />}
       {currentTab === 'audit-logs' && <AuditLogPage />}
+
+      {/* User Guide Modal */}
+      <UserGuideModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+      />
     </div>
   );
 };

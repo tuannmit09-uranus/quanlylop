@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import { NavTabId } from './Sidebar';
 import { AuthModal } from '../auth/AuthModal';
+import { UserGuideModal } from '../common/UserGuideModal';
 import { PWAInstallButton } from '../common/PWAInstallButton';
 import { auth } from '../../lib/firebase';
 import { signOut } from 'firebase/auth';
@@ -321,7 +322,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={() => {
                 if (onNavigate) {
-                  onNavigate('settings');
+                  onNavigate('tenant-settings');
                 }
               }}
               className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all cursor-pointer"
@@ -582,105 +583,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         defaultTab={authModalTab}
       />
 
-      {/* Help Modal */}
-      {showHelpModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
-                  📖
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">
-                    Quy trình Nghiệp vụ Cốt lõi
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Theo tài liệu BRD, SRS và System Design
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowHelpModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg text-sm"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-4 text-sm text-slate-600">
-              {/* Word Manual Download Card */}
-              <div className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-start space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <FileDown className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                      <span>Sổ tay Hướng dẫn Sử dụng Đầy đủ (.DOCX)</span>
-                      <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">20 Ảnh minh họa</span>
-                    </h4>
-                    <p className="text-xs text-slate-600 mt-0.5">
-                      Tài liệu Word hoàn chỉnh gồm 12 chương hướng dẫn từng bước: Đăng nhập, Điểm danh, Học phí VietQR, Đối soát sao kê, Cấu hình hệ thống.
-                    </p>
-                  </div>
-                </div>
-                <a
-                  href="/Huong_Dan_Su_Dung_EduTutor_Pro.docx"
-                  download="Huong_Dan_Su_Dung_EduTutor_Pro.docx"
-                  className="inline-flex items-center justify-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
-                >
-                  <FileDown className="w-4 h-4" />
-                  <span>Tải file Word (.docx)</span>
-                </a>
-              </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5">
-                <h4 className="font-semibold text-blue-900 flex items-center">
-                  <CheckCircle2 className="w-4 h-4 mr-1.5 text-blue-600" />
-                  Quy tắc 1: Lịch học cố định ≠ Buổi học tính phí
-                </h4>
-                <p className="text-xs text-blue-800 mt-1 leading-relaxed">
-                  Lịch cố định chỉ là cấu hình tuần. Buổi học thực tế sinh ra có thể Hủy (không tính phí), Đổi lịch, hoặc Học bù. Học phí cuối tháng tính theo các buổi được xác nhận <strong>fee_eligible</strong>.
-                </p>
-              </div>
-
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5">
-                <h4 className="font-semibold text-emerald-900 flex items-center">
-                  <CheckCircle2 className="w-4 h-4 mr-1.5 text-emerald-600" />
-                  Quy tắc 2: Cú pháp mã VietQR chuẩn ngân hàng
-                </h4>
-                <p className="text-xs text-emerald-800 mt-1 font-mono">
-                  [Mã trường]K[2 số cuối năm sinh][Tên học sinh]T[Tháng][Năm]
-                </p>
-                <p className="text-xs text-emerald-700 mt-1">
-                  Ví dụ: <strong>PBCK10TuanT72026</strong> hoặc <strong>SCHK09DucAnhT92026</strong> (Không dùng gạch dưới, chống app ngân hàng tự ý cắt bỏ ký tự).
-                </p>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5">
-                <h4 className="font-semibold text-amber-900 flex items-center">
-                  <CheckCircle2 className="w-4 h-4 mr-1.5 text-amber-600" />
-                  Quy tắc 3: Đối soát tự động (Dual-Match Algorithm)
-                </h4>
-                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                  Đối soát sao kê ngân hàng kiểm tra đồng thời: <strong>Số tiền khớp 100%</strong> VÀ <strong>Nội dung giao dịch chứa mã học phí</strong>. Nếu lệch số tiền, hệ thống gắn cờ Lệch số tiền (Discrepancy) để giáo viên xử lý.
-                </p>
-              </div>
-
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowHelpModal(false)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium text-sm hover:bg-blue-700 transition-colors shadow-xs"
-                >
-                  Đã hiểu & Bắt đầu
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Comprehensive User Guide Modal (14 pages, PDF download, PDF upload, YouTube video) */}
+      <UserGuideModal
+        isOpen={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+      />
     </header>
   );
 };

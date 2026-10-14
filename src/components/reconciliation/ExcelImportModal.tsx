@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   parseBankStatementFile,
@@ -16,6 +16,8 @@ import {
   ArrowRight,
   Info,
   Layers,
+  Youtube,
+  ExternalLink,
 } from 'lucide-react';
 
 interface ExcelImportModalProps {
@@ -43,10 +45,23 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
   const [importMonth, setImportMonth] = useState<number>(selectedMonth);
   const [importYear, setImportYear] = useState<number>(selectedYear);
-  const [overwrite, setOverwrite] = useState<boolean>(true);
+  const [overwrite, setOverwrite] = useState<boolean>(false);
 
   const [previewRows, setPreviewRows] = useState<ParsedTransactionRow[]>([]);
   const [totalCredit, setTotalCredit] = useState<number>(0);
+
+  // Reset state when modal is opened - mặc định KHÔNG check ghi đè toàn bộ
+  useEffect(() => {
+    if (isOpen) {
+      setFile(null);
+      setError(null);
+      setPreviewRows([]);
+      setTotalCredit(0);
+      setImportMonth(selectedMonth);
+      setImportYear(selectedYear);
+      setOverwrite(false);
+    }
+  }, [isOpen, selectedMonth, selectedYear]);
 
   if (!isOpen) return null;
 
@@ -151,6 +166,32 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+
+        {/* YouTube Video Guide Banner */}
+        <div className="bg-red-50/90 border border-red-200 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs shadow-2xs">
+          <div className="flex items-center space-x-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Youtube className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-bold text-red-950 block truncate">
+                Chưa biết cách tải sao kê từ tài khoản ngân hàng?
+              </span>
+              <span className="text-[11px] text-red-700 block truncate">
+                Xem video hướng dẫn trích xuất file sao kê Excel từ tài khoản ngân hàng (YouTube)
+              </span>
+            </div>
+          </div>
+          <a
+            href="https://www.youtube.com/watch?v=lBMk39wyZzU"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-all shrink-0 shadow-2xs cursor-pointer"
+          >
+            <span>Xem Video</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
         </div>
 
         {/* Month Selector & Options */}

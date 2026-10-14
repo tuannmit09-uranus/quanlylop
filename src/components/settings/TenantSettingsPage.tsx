@@ -38,7 +38,15 @@ import {
   Shield,
   RefreshCw,
   AlertTriangle,
+  FileText,
+  FileDown,
+  Youtube,
 } from 'lucide-react';
+import {
+  UserGuideModal,
+  DEFAULT_GUIDE_PDF_URL,
+  YOUTUBE_BANK_STATEMENT_GUIDE_URL,
+} from '../common/UserGuideModal';
 
 const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=150&auto=format&fit=crop&q=80',
@@ -95,6 +103,10 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [passwordError, setPasswordError] = useState('');
+
+  // Guide & YouTube Tutorial Modal State
+  const [showUserGuideModal, setShowUserGuideModal] = useState(false);
+  const [showYoutubeModal, setShowYoutubeModal] = useState(false);
 
   // Modal / New Tenant State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -223,6 +235,8 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
       processImageFile(e.dataTransfer.files[0]);
     }
   };
+
+
 
   const handleSaveTenant = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1065,6 +1079,99 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
               </div>
             </div>
           </div>
+
+          {/* Guide Documentation & YouTube Statement Tutorial Card */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
+                  <Youtube className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs sm:text-sm">
+                    Tài Liệu Hướng Dẫn Sử Dụng & Video Trích Xuất Sao Kê Ngân Hàng
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Tải về sổ tay hướng dẫn sử dụng file PDF (14 trang) và video hướng dẫn xuất sao kê ngân hàng
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowUserGuideModal(true)}
+                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors flex items-center space-x-1.5 border border-blue-200 cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Xem sổ tay HDSD</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Box 1: PDF Guide File */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-slate-900 text-xs">File PDF Hướng Dẫn Sử Dụng Hệ Thống</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Sổ tay tài liệu PDF 14 trang A4 chi tiết: Quản lý học sinh, Điểm danh di động, Học phí VietQR, Đối soát tự động...
+                  </p>
+                  <p className="text-[11px] text-slate-700 font-medium">
+                    Tên file: <strong className="text-slate-900">Huong_Dan_Su_Dung_EduTutor_Pro.pdf</strong>
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60">
+                  <a
+                    href={DEFAULT_GUIDE_PDF_URL}
+                    download="Huong_Dan_Su_Dung_EduTutor_Pro.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-2 cursor-pointer"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    <span>Tải file PDF Hướng dẫn (14 trang)</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* Box 2: YouTube Video Tutorial */}
+              <div className="bg-red-50/60 p-4 rounded-2xl border border-red-200/80 space-y-3 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <div className="flex items-center space-x-2">
+                    <Youtube className="w-4 h-4 text-red-600" />
+                    <span className="font-bold text-red-950 text-xs">Video HD Trích Xuất Sao Kê Ngân Hàng</span>
+                  </div>
+                  <p className="text-[11px] text-red-800 leading-relaxed">
+                    Xem video hướng dẫn chi tiết cách tải sao kê Excel từ tài khoản ngân hàng (Vietcombank, MB, Techcombank...) để đối soát tự động.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-red-200/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowYoutubeModal(true)}
+                    className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <Youtube className="w-3.5 h-3.5" />
+                    <span>Xem Video Hướng Dẫn</span>
+                  </button>
+
+                  <a
+                    href={YOUTUBE_BANK_STATEMENT_GUIDE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 bg-white hover:bg-red-50 text-red-700 border border-red-300 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <span>Mở trên YouTube</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Right Column: Multi-Tenant Workspace Directory (4 cols) */}
@@ -1513,6 +1620,60 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
             </div>
           </div>
         </div>
+      )}
+
+      {/* YouTube Statement Extraction Tutorial Modal */}
+      {showYoutubeModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 text-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-700 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Youtube className="w-5 h-5 text-red-500" />
+                <h4 className="font-bold text-sm">
+                  Hướng Dẫn Trích Xuất Sao Kê Từ Tài Khoản Ngân Hàng
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowYoutubeModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-800">
+              <iframe
+                src="https://www.youtube.com/embed/lBMk39wyZzU?autoplay=1"
+                title="Hướng dẫn trích xuất sao kê ngân hàng"
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+
+            <div className="flex items-center justify-between px-2 pt-1 text-xs text-slate-400">
+              <span>Link video: <a href={YOUTUBE_BANK_STATEMENT_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{YOUTUBE_BANK_STATEMENT_GUIDE_URL}</a></span>
+              <a
+                href={YOUTUBE_BANK_STATEMENT_GUIDE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-1 text-red-400 hover:text-red-300 font-bold"
+              >
+                <span>Xem trên YouTube</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comprehensive User Guide Modal */}
+      {showUserGuideModal && (
+        <UserGuideModal
+          isOpen={showUserGuideModal}
+          onClose={() => setShowUserGuideModal(false)}
+        />
       )}
     </div>
   );

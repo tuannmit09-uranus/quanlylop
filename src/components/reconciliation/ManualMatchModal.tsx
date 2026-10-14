@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { BankTransaction } from '../../types';
 import { formatVND, normalizeBankMemo } from '../../utils/vietqr';
@@ -11,47 +11,93 @@ import {
   User,
   GraduationCap,
   Calendar,
+  AlertCircle,
+  Clock,
 } from 'lucide-react';
 
 interface ManualMatchModalProps {
   transaction: BankTransaction | null;
   isOpen: boolean;
   onClose: () => void;
+  month?: number;
+  year?: number;
 }
 
 export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
   transaction,
   isOpen,
   onClose,
+  month,
+  year,
 }) => {
-  const { tuitionItems, manualMatchTransaction, students } = useApp();
+  const { tuitionItems, manualMatchTransaction, students, currentTenant } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Reset search term when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setSearchTerm('');
+    }
+  }, [isOpen, transaction?.id]);
 
   if (!isOpen || !transaction) return null;
 
-  // Filter tuition items for the transaction's month/year, or unpaid items
-  const candidateTuitions = tuitionItems.filter((tui) => {
-    // Show unpaid or matching month
-    const isSameMonth =
-      tui.periodMonth === transaction.statementMonth &&
-      tui.periodYear === transaction.statementYear;
+  const targetMonth = transaction.statementMonth || month || 0;
+  const targetYear = transaction.statementYear || year || 0;
 
-    if (!isSameMonth && tui.status === 'paid') return false;
+  // Cải tiến lọc danh sách học phí:
+  // 1. Chỉ hiện danh sách học phí của tháng đang đối soát (statementMonth & statementYear)
+  // 2. Chỉ hiện danh sách học phí CHƯA NỘP (loại bỏ học sinh đã nộp status === 'paid')
+  const candidateTuitions = tuitionItems
+    .filter((tui) => {
+      // 1. Strict Tenant Isolation
+      if (currentTenant?.id && tui.tenant_id !== currentTenant.id) return false;
 
-    if (!searchTerm) return true;
+      // 2. Chỉ hiện danh sách học phí của tháng đang đối soát
+      if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) {
+        return false;
+      }
 
-    const term = searchTerm.toLowerCase();
-    const normalizedTerm = normalizeBankMemo(searchTerm);
-    const normalizedRef = normalizeBankMemo(tui.paymentReference);
-    const student = students.find((s) => s.id === tui.studentId);
-    return (
-      tui.studentName.toLowerCase().includes(term) ||
-      tui.className.toLowerCase().includes(term) ||
-      tui.paymentReference.toLowerCase().includes(term) ||
-      (normalizedTerm && normalizedRef.includes(normalizedTerm)) ||
-      (student && student.parentName && student.parentName.toLowerCase().includes(term))
-    );
-  });
+      // 3. Chỉ hiện danh sách học phí CHƯA NỘP (bỏ hoàn toàn học sinh đã nộp)
+      if (tui.status === 'paid') {
+        return false;
+      }
+
+      // 4. Chỉ hiện học sinh có buổi tính phí > 0
+      if ((tui.sessionCount || 0) <= 0) {
+        return false;
+      }
+
+      // 5. Tìm kiếm theo tên học sinh, lớp, mã chuyển khoản QR, phụ huynh
+      if (!searchTerm.trim()) return true;
+
+      const term = searchTerm.trim().toLowerCase();
+      const normalizedTerm = normalizeBankMemo(searchTerm);
+      const normalizedRef = normalizeBankMemo(tui.paymentReference);
+      const student = students.find((s) => s.id === tui.studentId);
+      return (
+        tui.studentName.toLowerCase().includes(term) ||
+        tui.className.toLowerCase().includes(term) ||
+        tui.paymentReference.toLowerCase().includes(term) ||
+        (normalizedTerm && normalizedRef.includes(normalizedTerm)) ||
+        (student && student.parentName && student.parentName.toLowerCase().includes(term))
+      );
+    })
+    .sort((a, b) => {
+      // Ưu tiên 1: Học sinh có học phí khớp đúng số tiền giao dịch lên đầu
+      const aAmountMatch = a.totalAmount === transaction.amount ? 1 : 0;
+      const bAmountMatch = b.totalAmount === transaction.amount ? 1 : 0;
+      if (bAmountMatch !== aAmountMatch) return bAmountMatch - aAmountMatch;
+
+      // Ưu tiên 2: Mã QR xuất hiện trong nội dung chuyển khoản
+      const normDesc = normalizeBankMemo(transaction.description);
+      const aInDesc = normDesc.includes(normalizeBankMemo(a.paymentReference)) ? 1 : 0;
+      const bInDesc = normDesc.includes(normalizeBankMemo(b.paymentReference)) ? 1 : 0;
+      if (bInDesc !== aInDesc) return bInDesc - aInDesc;
+
+      // Ưu tiên 3: Theo tên học sinh
+      return a.studentName.localeCompare(b.studentName, 'vi');
+    });
 
   const handleSelectTuition = (tuitionId: string) => {
     manualMatchTransaction(transaction.id, tuitionId);
@@ -127,14 +173,25 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
           </div>
 
           <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
-            <span>Danh sách học phí Tháng {transaction.statementMonth}/{transaction.statementYear}:</span>
-            <span>{candidateTuitions.length} học sinh</span>
+            <span className="font-semibold text-slate-700">
+              Danh sách học phí chưa nộp (Tháng {targetMonth}/{targetYear}):
+            </span>
+            <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+              {candidateTuitions.length} học sinh
+            </span>
           </div>
 
-          <div className="border border-slate-200 rounded-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+          <div className="border border-slate-200 rounded-2xl max-h-72 overflow-y-auto divide-y divide-slate-100">
             {candidateTuitions.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400">
-                Không tìm thấy bản ghi học phí phù hợp với từ khóa.
+              <div className="p-8 text-center text-xs text-slate-400 space-y-1.5">
+                <p className="font-bold text-slate-700 text-sm">
+                  {searchTerm
+                    ? `Không tìm thấy học sinh chưa nộp nào khớp với "${searchTerm}"`
+                    : `Không còn học sinh chưa nộp trong Tháng ${targetMonth}/${targetYear}`}
+                </p>
+                <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                  Hệ thống chỉ hiển thị học phí chưa nộp của Tháng {targetMonth}/{targetYear}. Tất cả học sinh khác đã được gán hoặc đã hoàn thành nộp học phí.
+                </p>
               </div>
             ) : (
               candidateTuitions.map((tui) => {
@@ -143,48 +200,63 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
                   <div
                     key={tui.id}
                     onClick={() => handleSelectTuition(tui.id)}
-                    className="p-3 hover:bg-blue-50/60 cursor-pointer flex items-center justify-between transition-colors group"
+                    className="p-3.5 hover:bg-blue-50/70 cursor-pointer flex items-center justify-between gap-3 transition-colors group"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                         <span className="font-bold text-slate-900 text-xs group-hover:text-blue-700">
                           {tui.studentName}
                         </span>
                         <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
                           {tui.className}
                         </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                            tui.status === 'paid'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {tui.status === 'paid' ? 'Đã nộp' : 'Chưa nộp'}
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md">
+                          {tui.status === 'partial' ? 'Nộp một phần' : 'Chưa nộp'}
                         </span>
                       </div>
-                      <div className="flex items-center space-x-3 text-[11px] text-slate-500 font-mono">
-                        <span>Mã QR: {tui.paymentReference}</span>
+                      <div className="flex items-center space-x-2 text-[11px] text-slate-500 font-mono flex-wrap">
+                        <span className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 text-amber-800 font-bold">
+                          {tui.paymentReference}
+                        </span>
                         <span>•</span>
-                        <span>{tui.sessionCount || 0} buổi học</span>
+                        <span>{tui.sessionCount || 0} buổi</span>
+                        <span>•</span>
+                        <span className="font-sans font-medium text-slate-600">
+                          T{tui.periodMonth}/{tui.periodYear}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="text-right space-y-1">
-                      <div className="text-xs font-black text-slate-900 font-mono">
-                        {formatVND(tui.totalAmount)}
+                    <div className="flex items-center space-x-3 shrink-0">
+                      <div className="text-right space-y-0.5">
+                        <div className="text-sm font-black text-slate-900 font-mono">
+                          {formatVND(tui.totalAmount)}
+                        </div>
+                        {isAmountMatch ? (
+                          <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Khớp số tiền</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                            <AlertTriangle className="w-3 h-3 text-amber-600" />
+                            <span>Lệch {formatVND(Math.abs(tui.totalAmount - transaction.amount))}</span>
+                          </span>
+                        )}
                       </div>
-                      {isAmountMatch ? (
-                        <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Khớp đúng số tiền</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>Lệch {formatVND(Math.abs(tui.totalAmount - transaction.amount))}</span>
-                        </span>
-                      )}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectTuition(tui.id);
+                        }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs group-hover:scale-102 flex items-center space-x-1 cursor-pointer"
+                        title={`Gán giao dịch này cho học sinh ${tui.studentName}`}
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        <span>Gán</span>
+                      </button>
                     </div>
                   </div>
                 );

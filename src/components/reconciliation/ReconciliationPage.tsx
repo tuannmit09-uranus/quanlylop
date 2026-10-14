@@ -697,6 +697,8 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
       <ManualMatchModal
         transaction={selectedTxnForMatch}
         isOpen={showManualMatchModal}
+        month={selectedMonth}
+        year={selectedYear}
         onClose={() => {
           setShowManualMatchModal(false);
           setSelectedTxnForMatch(null);

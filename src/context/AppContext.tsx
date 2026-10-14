@@ -222,6 +222,7 @@ interface AppContextType {
     paidAmount?: number,
     paymentMethod?: 'qr' | 'cash'
   ) => void;
+  recordTuitionReminder: (tuitionIds: string[], channel: 'zalo' | 'email' | 'both') => void;
 
   // Bank Statements & Automated Reconciliation
   bankStatements: BankStatement[];
@@ -466,14 +467,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unsubscribers.push(
           subscribeToCollection<Tenant>('tenants', (items) => {
             const deleted = getDeletedTenantIdsLocal();
-            const cleaned = (items || []).filter(
-              (t) =>
-                t.id !== 'tenant-mai' &&
-                t.id !== 'tenant-tuan' &&
-                t.id !== 'tenant-tonga' &&
-                t.id !== 'tenant-1788330721941' &&
-                !deleted.has(t.id)
-            );
+            const cleaned = (items || [])
+              .filter(
+                (t) =>
+                  t.id !== 'tenant-mai' &&
+                  t.id !== 'tenant-tuan' &&
+                  t.id !== 'tenant-tonga' &&
+                  t.id !== 'tenant-1788330721941' &&
+                  !deleted.has(t.id)
+              )
+              .map((t) => {
+                if (typeof (t as any).customGuidePdfUrl === 'string' && (t as any).customGuidePdfUrl.startsWith('data:')) {
+                  const safe = { ...t };
+                  delete (safe as any).customGuidePdfUrl;
+                  delete (safe as any).customGuidePdfName;
+                  return safe;
+                }
+                return t;
+              });
             setTenants(cleaned);
             setCurrentTenantId((prev) => {
               if (prev && cleaned.some((t) => t.id === prev)) return prev;
@@ -897,10 +908,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('update', 'tenant', tenantId, `Chuyển sang tenant: ${tenantId}`);
   };
 
-  const updateTenant = (data: Partial<Tenant>, targetTenantId?: string) => {
+  const updateTenant = (
+    dataOrId: Partial<Tenant> | string,
+    targetOrData?: string | Partial<Tenant>
+  ) => {
+    let data: Partial<Tenant>;
+    let targetTenantId: string | undefined;
+
+    if (typeof dataOrId === 'string') {
+      targetTenantId = dataOrId;
+      data = (typeof targetOrData === 'object' && targetOrData !== null ? targetOrData : {}) as Partial<Tenant>;
+    } else {
+      data = dataOrId || {};
+      targetTenantId = typeof targetOrData === 'string' ? targetOrData : undefined;
+    }
+
     const tid = targetTenantId || currentTenant.id;
     setTenants((prev) => {
-      const updated = prev.map((t) => (t.id === tid ? { ...t, ...data } : t));
+      const updated = prev.map((t) => {
+        if (t.id === tid) {
+          const merged = { ...t, ...data };
+          if (typeof (merged as any).customGuidePdfUrl === 'string' && (merged as any).customGuidePdfUrl.startsWith('data:')) {
+            delete (merged as any).customGuidePdfUrl;
+            delete (merged as any).customGuidePdfName;
+          }
+          return merged;
+        }
+        return t;
+      });
       const targetObj = updated.find((t) => t.id === tid);
       if (targetObj) {
         syncSaveToFirestore('tenants', tid, targetObj);
@@ -3212,6 +3247,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const recordTuitionReminder = (tuitionIds: string[], channel: 'zalo' | 'email' | 'both') => {
+    const nowIso = new Date().toISOString();
+    setTuitionItems((prev) =>
+      prev.map((t) => {
+        if (tuitionIds.includes(t.id) && t.tenant_id === currentTenant.id) {
+          const updated: TuitionItem = {
+            ...t,
+            lastReminderSentAt: nowIso,
+            lastReminderChannel: channel,
+            updated_at: new Date().toISOString().split('T')[0],
+          };
+          syncSaveToFirestore('tuitions', t.id, updated);
+          return updated;
+        }
+        return t;
+      })
+    );
+    addAuditLog('update', 'tuition', tuitionIds.join(','), `Gửi thông báo nhắc học phí qua ${channel.toUpperCase()} cho ${tuitionIds.length} học sinh`);
+  };
+
   // Bank Statements & Automated Reconciliation with Smart Deduplication
   const importBankStatement = (
     month: number,
@@ -4194,6 +4249,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         lockMonthlyTuition,
         adjustTuitionSessions,
         updateTuitionStatus,
+        recordTuitionReminder,
         bankStatements: tenantBankStatements,
         bankTransactions: tenantBankTransactions,
         importBankStatement,

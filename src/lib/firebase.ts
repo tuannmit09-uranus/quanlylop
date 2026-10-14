@@ -99,6 +99,14 @@ export function cleanDataForFirestore<T>(data: T): T {
   if (data === undefined || data === null) {
     return null as unknown as T;
   }
+  if (typeof data === 'string') {
+    // Firestore has 1,048,576 bytes limit. If a string is a base64 PDF or exceeds 150KB, strip it to avoid rejection
+    if (data.startsWith('data:application/pdf') || data.length > 150000) {
+      console.warn('Omitted oversized string property from Firestore sync (length: ' + data.length + ')');
+      return '' as unknown as T;
+    }
+    return data;
+  }
   if (Array.isArray(data)) {
     return data.map((item) => cleanDataForFirestore(item)) as unknown as T;
   }
@@ -106,6 +114,10 @@ export function cleanDataForFirestore<T>(data: T): T {
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(data as Record<string, any>)) {
       if (value !== undefined) {
+        // Do not persist huge file data URLs like customGuidePdfUrl
+        if (key === 'customGuidePdfUrl' && typeof value === 'string' && value.startsWith('data:')) {
+          continue;
+        }
         result[key] = cleanDataForFirestore(value);
       }
     }
@@ -195,6 +207,12 @@ export async function saveDocumentToFirestore(collectionName: string, docId: str
   try {
     const docRef = doc(db, collectionName, docId);
     const sanitized = cleanDataForFirestore(data);
+    const serialized = JSON.stringify(sanitized);
+    // Firestore max document size is 1,048,576 bytes
+    if (serialized.length > 850000) {
+      console.warn(`[Firestore Safe-Guard] Document ${collectionName}/${docId} serialized length (${serialized.length} bytes) is too large. Skipping to avoid Firestore error.`);
+      return;
+    }
     await setDoc(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${collectionName}/${docId}`);
