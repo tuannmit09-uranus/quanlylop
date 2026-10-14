@@ -216,7 +216,12 @@ interface AppContextType {
   calculateTuitionForMonth?: (month?: number, year?: number, classId?: string) => void;
   lockMonthlyTuition: (month: number, year: number) => void;
   adjustTuitionSessions: (tuitionId: string, sessionIds: string[], reason?: string) => void;
-  updateTuitionStatus: (id: string, status: TuitionStatus, paidAmount?: number) => void;
+  updateTuitionStatus: (
+    id: string,
+    status: TuitionStatus,
+    paidAmount?: number,
+    paymentMethod?: 'qr' | 'cash'
+  ) => void;
 
   // Bank Statements & Automated Reconciliation
   bankStatements: BankStatement[];
@@ -231,7 +236,11 @@ interface AppContextType {
   addBankTransaction?: (txn: Partial<BankTransaction> & { amount: number; description: string }) => void;
   deleteBankTransaction: (txnId: string) => void;
   clearBankTransactionsForMonth: (month: number, year: number) => void;
-  runAutomatedReconciliation: (month?: number, year?: number) => { matchedCount: number; discrepancyCount: number };
+  runAutomatedReconciliation: (month?: number, year?: number) => {
+    matchedCount: number;
+    discrepancyCount: number;
+    skippedAlreadyPaidCount: number;
+  };
   manualMatchTransaction: (txnId: string, tuitionId: string) => void;
   unlinkTransaction: (txnId: string) => void;
 
@@ -555,12 +564,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const deleted = getDeletedTenantIdsLocal();
             const standardized = (items || [])
               .filter((b) => !b.tenant_id || !deleted.has(b.tenant_id))
-              .map((b) => ({
-                ...b,
-                matchedPaymentReference: b.matchedPaymentReference
+              .map((b) => {
+                const cleanRef = b.matchedPaymentReference
                   ? b.matchedPaymentReference.replace(/_/g, '')
-                  : b.matchedPaymentReference,
-              }));
+                  : b.matchedPaymentReference;
+
+                // STRICT CHECK: For automated matches (not manual), the statement description MUST contain 100% of the QR payment reference!
+                if (b.reconciliationStatus === 'matched' || b.reconciliationStatus === 'discrepancy') {
+                  const normDesc = normalizeBankMemo(b.description || '');
+                  const normRef = cleanRef ? normalizeBankMemo(cleanRef) : '';
+                  if (!normRef || normRef.length < 6 || !normDesc.includes(normRef)) {
+                    // False positive automated match from legacy code: reset to unmatched
+                    return {
+                      ...b,
+                      reconciliationStatus: 'unmatched' as const,
+                      matchedTuitionId: undefined,
+                      matchedStudentName: undefined,
+                      matchedPaymentReference: undefined,
+                      reconciledAt: undefined,
+                      notes: undefined,
+                    };
+                  }
+                }
+
+                return {
+                  ...b,
+                  matchedPaymentReference: cleanRef,
+                };
+              });
             setBankTransactions(standardized);
           }),
           subscribeToCollection<NotificationItem>('notifications', (items) => {
@@ -758,33 +789,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
 
             if (existingIdx >= 0) {
+              // PRESERVE EXISTING TUITION RECORD:
+              // Tuitions in Firestore are authoritative. Background attendance changes must NEVER
+              // mutate or overwrite sessionCount or totalAmount of existing tuition records.
+              // This completely eliminates the bug where Card 'Tổng Doanh thu dự kiến' jumps when navigating between features.
               const existing = currentTuitions[existingIdx];
-              const expectedId = `tui-${studentId}-${cls.id}-${month}${year}`;
-              // Check if any change actually occurred
-              const hasSessionIdsChanged = JSON.stringify(existing.eligibleSessionIds) !== JSON.stringify(studentSessionIds);
-              if (
-                existing.id !== expectedId ||
-                existing.tenant_id !== classTenantId ||
-                existing.sessionCount !== studentSessionCount ||
-                existing.totalAmount !== totalAmount ||
-                existing.paymentReference !== paymentReference ||
-                hasSessionIdsChanged
-              ) {
-                isChanged = true;
-                currentTuitions[existingIdx] = {
-                  ...existing,
-                  id: expectedId,
-                  tenant_id: classTenantId,
-                  eligibleSessionIds: studentSessionIds,
-                  sessionCount: studentSessionCount,
-                  totalAmount,
-                  feePerSession: cls.feePerSession,
-                  paymentReference,
-                  updated_at: new Date().toISOString().split('T')[0],
-                };
+              let itemUpdated = false;
+              let patchedItem = { ...existing };
+
+              if (existing.tenant_id !== classTenantId) {
+                patchedItem.tenant_id = classTenantId;
+                itemUpdated = true;
               }
-            } else {
-              // Create new tuition item - ALWAYS WITH classTenantId! NEVER with currentTenant.id!
+              if (!existing.paymentReference || existing.paymentReference.includes('_')) {
+                patchedItem.paymentReference = paymentReference;
+                itemUpdated = true;
+              }
+
+              if (itemUpdated) {
+                isChanged = true;
+                currentTuitions[existingIdx] = patchedItem;
+              }
+            } else if (studentSessionCount > 0) {
+              // Only create a new tuition item if there are actual attended sessions
               isChanged = true;
               currentTuitions.push({
                 id: `tui-${studentId}-${cls.id}-${month}${year}`,
@@ -2525,7 +2552,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         s.id === id
           ? {
               ...s,
-              status: 'cancelled',
+              status: 'cancelled' as const,
               feeEligible: false, // BR-003: Hủy buổi thì không tính phí
               cancelReason: reason,
               replacementSessionId: replacementId,
@@ -2559,7 +2586,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...s,
               date: newDate,
               dayOfWeek: new Date(newDate).getDay() as any,
-              sessionType: 'rescheduled',
+              sessionType: 'rescheduled' as const,
               extraSessionReason: reason,
             }
           : s
@@ -3152,16 +3179,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateTuitionStatus = (
     id: string,
     status: TuitionStatus,
-    paidAmount?: number
+    paidAmount?: number,
+    paymentMethod?: 'qr' | 'cash'
   ) => {
     setTuitionItems((prev) =>
       prev.map((t) => {
         if (t.id === id && t.tenant_id === currentTenant.id) {
+          const resolvedPaymentMethod: 'qr' | 'cash' | undefined =
+            status === 'paid'
+              ? paymentMethod || (t.bankTransactionId ? 'qr' : 'cash')
+              : undefined;
+
           const updatedItem: TuitionItem = {
             ...t,
             status,
-            paidAmount: paidAmount !== undefined ? paidAmount : t.totalAmount,
-            paidAt: status === 'paid' ? new Date().toLocaleString('vi-VN') : t.paidAt,
+            paymentMethod: resolvedPaymentMethod,
+            paidAmount:
+              status === 'paid'
+                ? paidAmount !== undefined
+                  ? paidAmount
+                  : t.totalAmount
+                : 0,
+            paidAt: status === 'paid' ? t.paidAt || new Date().toLocaleString('vi-VN') : undefined,
+            bankTransactionId: status === 'paid' ? t.bankTransactionId : undefined,
             updated_at: new Date().toISOString().split('T')[0],
           };
           syncSaveToFirestore('tuitions', id, updatedItem);
@@ -3339,10 +3379,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // BR-011 / SRS: Automated Reconciliation dual match
-  // Strict matching rule: ONLY match when transaction description genuinely contains
-  // the student's payment reference (e.g. SCHK09KhoaT92026) or unambiguous multi-word student name.
-  // NEVER match based on amount alone or loose single-word substrings (e.g. "khoa" in "chuyen khoan").
+  // BR-011 & BR-012: Automated Reconciliation 100% Exact QR Dual-Match
+  // Strict matching rule: ONLY match when transaction description contains 100% of the
+  // tuition's QR payment reference (e.g. SCHK09DucAnhT92026).
+  // AND BR-012: Những học sinh đã được đánh dấu "Đã nộp" từ trước thì KHÔNG đưa vào đối soát lại!
   const runAutomatedReconciliation = (month?: number, year?: number) => {
     let matchedCount = 0;
     let discrepancyCount = 0;
@@ -3363,97 +3403,135 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Track claimed tuitions so each tuition item is matched at most once (1-to-1 matching)
     const claimedTuitionIds = new Set<string>();
 
-    // Lock in tuitions already claimed by manual matching OR previously confirmed matches
+    // 1. Lock in tuitions already claimed by MANUAL matching (teacher explicitly selected)
     targetTxns.forEach((tx) => {
-      if (
-        (tx.reconciliationStatus === 'manual_matched' || tx.reconciliationStatus === 'matched') &&
-        tx.matchedTuitionId
-      ) {
+      if (tx.reconciliationStatus === 'manual_matched' && tx.matchedTuitionId) {
         claimedTuitionIds.add(tx.matchedTuitionId);
       }
     });
 
-    targetTxns.forEach((txn) => {
-      // Do not overwrite or modify matches already confirmed previously
-      if (txn.reconciliationStatus === 'manual_matched' || txn.reconciliationStatus === 'matched') return;
+    // 2. Identify students already marked "Đã nộp" (status === 'paid') from before.
+    // The user's explicit requirement: "những học sinh đã được đánh dấu Đã nộp từ trước thì không đưa vào đối soát lại"
+    // These tuitions are ALREADY paid (cash payment, marked paid in tuition page, or previously confirmed).
+    // They MUST NOT be reset to unpaid, and MUST NOT be matched again!
+    const alreadyPaidTuitions = updatedTuitions.filter(
+      (tui) =>
+        tui.tenant_id === currentTenant.id &&
+        tui.periodMonth === targetMonth &&
+        tui.periodYear === targetYear &&
+        tui.status === 'paid'
+    );
+    const alreadyPaidTuitionIds = new Set<string>(alreadyPaidTuitions.map((t) => t.id));
+    alreadyPaidTuitionIds.forEach((id) => claimedTuitionIds.add(id));
 
-      const rawDesc = txn.description || '';
-      const cleanDesc = rawDesc.toUpperCase();
-      const unaccentedDesc = removeVietnameseAccents(rawDesc).toLowerCase();
-      const normalizedDesc = normalizeBankMemo(rawDesc);
+    // Also lock all other tenant tuitions that are paid
+    updatedTuitions.forEach((tui) => {
+      if (tui.tenant_id === currentTenant.id && tui.status === 'paid') {
+        claimedTuitionIds.add(tui.id);
+      }
+    });
 
-      // Strategy 1: Find matching tuition by payment reference (strictly currentTenant)
-      // Normalizes away underscores, spaces, dashes so SCH_K09_DucAnh_T9_2026 matches SCHK09DucAnhT92026 100%
-      let matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
+    // 3. Keep transactions that are already matched to an already-paid student untouched!
+    // Only reset transactions that were discrepancies or matched to a tuition that was not marked as paid.
+    targetTxns.forEach((tx) => {
+      if (tx.reconciliationStatus === 'manual_matched') return;
+
+      // If already matched to a paid student, preserve it!
+      if (
+        tx.reconciliationStatus === 'matched' &&
+        tx.matchedTuitionId &&
+        alreadyPaidTuitionIds.has(tx.matchedTuitionId)
+      ) {
+        return;
+      }
+
+      // Reset discrepancies or invalid matches
+      if (
+        tx.reconciliationStatus === 'discrepancy' ||
+        (tx.reconciliationStatus === 'matched' && (!tx.matchedTuitionId || !alreadyPaidTuitionIds.has(tx.matchedTuitionId)))
+      ) {
+        if (tx.matchedTuitionId && !alreadyPaidTuitionIds.has(tx.matchedTuitionId)) {
+          const tIdx = updatedTuitions.findIndex((t) => t.id === tx.matchedTuitionId);
+          if (tIdx >= 0 && updatedTuitions[tIdx].status !== 'paid') {
+            const resetTui = {
+              ...updatedTuitions[tIdx],
+              status: 'unpaid' as const,
+              paidAmount: 0,
+              bankTransactionId: undefined,
+              paidAt: undefined,
+            };
+            updatedTuitions[tIdx] = resetTui;
+            syncSaveToFirestore('tuitions', resetTui.id, resetTui);
+          }
+        }
+        const txIdx = updatedTxns.findIndex((t) => t.id === tx.id);
+        if (txIdx >= 0) {
+          const resetTxn = {
+            ...updatedTxns[txIdx],
+            matchedTuitionId: undefined,
+            matchedStudentName: undefined,
+            matchedPaymentReference: undefined,
+            reconciliationStatus: 'unmatched' as const,
+            reconciledAt: undefined,
+            notes: undefined,
+          };
+          updatedTxns[txIdx] = resetTxn;
+          syncSaveToFirestore('bankTransactions', resetTxn.id, resetTxn);
+        }
+      }
+    });
+
+    // 4. Candidate tuitions in current tenant and target period with valid paymentReference:
+    // STRICT RULE: Students already marked as "Đã nộp" (status === 'paid') are EXCLUDED from reconciliation!
+    const candidateTuitions = updatedTuitions
+      .map((tui, index) => ({ tui, index }))
+      .filter(({ tui }) => {
         if (tui.tenant_id !== currentTenant.id) return false;
         if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-        if (!tui.paymentReference) return false;
-        if (claimedTuitionIds.has(tui.id)) return false;
-
-        const normalizedRef = normalizeBankMemo(tui.paymentReference);
-        if (!normalizedRef || normalizedRef.length < 6) return false;
-
-        // Exact match with normalized bank format (no underscores, no spaces)
-        if (normalizedDesc.includes(normalizedRef)) return true;
-
-        // Sub-check without disambiguation numeric index: e.g. "SCHK09VU1T92026" matches "SCHK09VUT92026"
-        const refWithoutNumIndex = normalizedRef.replace(/\d+(T\d{1,2}\d{4})$/, '$1');
-        if (refWithoutNumIndex !== normalizedRef && normalizedDesc.includes(refWithoutNumIndex)) {
-          return true;
-        }
-
-        // Sub-check: without year/month suffix e.g. "SCHK09DUCANH" (when exact amount matches)
-        const shortRef = normalizedRef.replace(/T\d{1,2}\d{4}$/, '');
-        if (shortRef.length >= 8 && normalizedDesc.includes(shortRef)) {
-          return true;
-        }
-
-        const shortWithoutNumIndex = shortRef.replace(/\d+$/, '');
-        if (shortWithoutNumIndex.length >= 8 && normalizedDesc.includes(shortWithoutNumIndex)) {
-          return true;
-        }
-
-        // Sub-check with old underscore format: e.g. "SCH_K09_DUCANH"
-        const rawRefUpper = tui.paymentReference.toUpperCase();
-        if (rawRefUpper.length >= 8 && cleanDesc.includes(rawRefUpper)) {
-          return true;
-        }
-
-        return false;
+        if (!tui.paymentReference || tui.paymentReference.trim().length < 6) return false;
+        // Bắt buộc: Học sinh đã được đánh dấu Đã nộp từ trước thì KHÔNG đưa vào đối soát lại!
+        if (tui.status === 'paid') return false;
+        return true;
       });
 
-      // Strategy 2: If NO payment reference found, ONLY match when memo explicitly mentions
-      // BOTH the student name AND tuition context keywords (e.g. "hoc phi", "tien hoc", "dong tien", "thang")
-      if (matchedTuitionIndex < 0) {
-        const cleanedMemo = unaccentedDesc
-          .replace(/nguyen minh tuan/g, ' ')
-          .replace(/tong thi nga/g, ' ')
-          .replace(/chuyen khoan|chuyen tien|tai khoan|ngan hang|vietcombank|techcombank|mbbank|vietinbank|agribank|bidv|sacombank|vpbank|napas|zalo/g, ' ');
+    // Sort candidate tuitions by normalized reference length descending (longest/most specific QR first)
+    candidateTuitions.sort(
+      (a, b) =>
+        normalizeBankMemo(b.tui.paymentReference).length -
+        normalizeBankMemo(a.tui.paymentReference).length
+    );
 
-        const hasTuitionKeyword = /(hoc phi|tien hoc|hp|dong hoc|dong tien|nop tien|nop hoc|thang|con|lop)/i.test(unaccentedDesc);
+    targetTxns.forEach((txn) => {
+      // Do not overwrite manual matches confirmed by the teacher
+      if (txn.reconciliationStatus === 'manual_matched') return;
 
-        if (hasTuitionKeyword) {
-          matchedTuitionIndex = updatedTuitions.findIndex((tui) => {
-            if (tui.tenant_id !== currentTenant.id) return false;
-            if (tui.periodMonth !== targetMonth || tui.periodYear !== targetYear) return false;
-            if (claimedTuitionIds.has(tui.id)) return false;
+      // Do not overwrite transactions already matched to an already-paid student
+      if (
+        txn.reconciliationStatus === 'matched' &&
+        txn.matchedTuitionId &&
+        alreadyPaidTuitionIds.has(txn.matchedTuitionId)
+      ) {
+        return;
+      }
 
-            const student = students.find((s) => s.id === tui.studentId && s.tenant_id === currentTenant.id);
-            if (!student) return false;
+      const rawDesc = txn.description || '';
+      const normalizedDesc = normalizeBankMemo(rawDesc);
+      if (!normalizedDesc || normalizedDesc.length < 6) return;
 
-            const sClean = removeVietnameseAccents(student.fullName.trim()).toLowerCase();
-            const words = sClean.split(/\s+/).filter(Boolean);
+      // Find candidate tuition whose normalized QR code is 100% contained in normalizedDesc
+      let matchedTuitionIndex = -1;
 
-            // Require student name match
-            if (words.length >= 2) {
-              const twoWord = words.slice(-2).join(' ');
-              const fullWord = words.join(' ');
-              if (cleanedMemo.includes(fullWord) || (twoWord.length >= 6 && cleanedMemo.includes(twoWord))) {
-                if (txn.amount === tui.totalAmount) return true;
-              }
-            }
-            return false;
-          });
+      for (const { tui, index } of candidateTuitions) {
+        if (claimedTuitionIds.has(tui.id)) continue;
+
+        const normalizedRef = normalizeBankMemo(tui.paymentReference);
+        if (!normalizedRef || normalizedRef.length < 6) continue;
+
+        // Strict 100% match requirement:
+        // All characters of the QR payment reference must appear in the statement description.
+        if (normalizedDesc.includes(normalizedRef)) {
+          matchedTuitionIndex = index;
+          break;
         }
       }
 
@@ -3463,12 +3541,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const tui = updatedTuitions[matchedTuitionIndex];
         claimedTuitionIds.add(tui.id);
         const isAmountExact = txn.amount === tui.totalAmount;
+        const cleanRef = (tui.paymentReference || '').replace(/_/g, '');
 
         if (isAmountExact) {
-          // Exact Match (100% amount & identification)
+          // Exact Match: 100% QR content match AND 100% Amount match
           const updatedTui = {
             ...tui,
             status: 'paid' as const,
+            paymentMethod: 'qr' as const,
             paidAmount: txn.amount,
             bankTransactionId: txn.id,
             paidAt: txn.transactionDate,
@@ -3481,17 +3561,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...updatedTxns[txnIdx],
               matchedTuitionId: tui.id,
               matchedStudentName: tui.studentName,
-              matchedPaymentReference: (tui.paymentReference || '').replace(/_/g, ''),
+              matchedPaymentReference: cleanRef,
               reconciliationStatus: 'matched' as const,
               reconciledAt: new Date().toLocaleString('vi-VN'),
-              notes: `Khớp chính xác ${txn.amount.toLocaleString('vi-VN')}đ với học sinh ${tui.studentName} (${tui.className})`,
+              notes: `Khớp chính xác 100% mã QR [${cleanRef}] và số tiền ${txn.amount.toLocaleString('vi-VN')}đ với học sinh ${tui.studentName} (${tui.className})`,
             };
             updatedTxns[txnIdx] = updatedTxnObj;
             syncSaveToFirestore('bankTransactions', updatedTxnObj.id, updatedTxnObj);
           }
           matchedCount++;
         } else {
-          // Discrepancy (Amount mismatch)
+          // Discrepancy: 100% QR content match BUT Amount mismatch
           const updatedTui = {
             ...tui,
             status: (txn.amount < tui.totalAmount ? 'partial' : 'overpaid') as any,
@@ -3507,10 +3587,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...updatedTxns[txnIdx],
               matchedTuitionId: tui.id,
               matchedStudentName: tui.studentName,
-              matchedPaymentReference: (tui.paymentReference || '').replace(/_/g, ''),
+              matchedPaymentReference: cleanRef,
               reconciliationStatus: 'discrepancy' as const,
               reconciledAt: new Date().toLocaleString('vi-VN'),
-              notes: `Nhận diện học sinh ${tui.studentName} nhưng số tiền chuyển ${txn.amount.toLocaleString('vi-VN')}đ lệch so với học phí ${tui.totalAmount.toLocaleString('vi-VN')}đ`,
+              notes: `Khớp 100% mã QR [${cleanRef}] học sinh ${tui.studentName} nhưng số tiền chuyển ${txn.amount.toLocaleString('vi-VN')}đ lệch so với học phí ${tui.totalAmount.toLocaleString('vi-VN')}đ`,
             };
             updatedTxns[txnIdx] = updatedTxnObj;
             syncSaveToFirestore('bankTransactions', updatedTxnObj.id, updatedTxnObj);
@@ -3518,7 +3598,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           discrepancyCount++;
         }
       } else {
-        // Did not match transfer content - MUST remain or reset to unmatched
+        // No 100% QR match - MUST remain or reset to unmatched
         if (txnIdx >= 0) {
           const updatedTxnObj = {
             ...updatedTxns[txnIdx],
@@ -3548,10 +3628,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'reconcile_match',
       'tuition_reconciliation',
       `period-${targetMonth}-${targetYear}`,
-      `Chạy đối soát tự động Tháng ${targetMonth}/${targetYear}: Khớp ${matchedCount} học phí, phát hiện ${discrepancyCount} lệch số tiền.`
+      `Chạy đối soát tự động Tháng ${targetMonth}/${targetYear} (Khớp chuẩn 100% mã QR): Khớp ${matchedCount} học phí, phát hiện ${discrepancyCount} lệch số tiền, bỏ qua ${alreadyPaidTuitions.length} học sinh đã nộp từ trước.`
     );
 
-    return { matchedCount, discrepancyCount };
+    return {
+      matchedCount,
+      discrepancyCount,
+      skippedAlreadyPaidCount: alreadyPaidTuitions.length,
+    };
   };
 
   const manualMatchTransaction = (txnId: string, tuitionId: string) => {
@@ -3560,9 +3644,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!tui || !txn) return;
     if (tui.tenant_id !== currentTenant.id || txn.tenant_id !== currentTenant.id) return;
 
+    const cleanRef = (tui.paymentReference || '').replace(/_/g, '');
     const updatedTui = {
       ...tui,
       status: txn.amount >= tui.totalAmount ? ('paid' as const) : ('partial' as const),
+      paymentMethod: 'qr' as const,
       paidAmount: txn.amount,
       bankTransactionId: txnId,
       paidAt: txn.transactionDate,
@@ -3572,9 +3658,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...txn,
       matchedTuitionId: tuitionId,
       matchedStudentName: tui.studentName,
+      matchedPaymentReference: cleanRef,
       reconciliationStatus: 'manual_matched' as const,
       reconciledAt: new Date().toLocaleString('vi-VN'),
-      notes: `Đối soát thủ công bởi giáo viên với học sinh ${tui.studentName}`,
+      notes: `Đối soát thủ công bởi giáo viên với học sinh ${tui.studentName} [${cleanRef}]`,
     };
 
     setTuitionItems((prev) =>
@@ -3607,6 +3694,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedTui = tui ? {
       ...tui,
       status: 'unpaid' as const,
+      paymentMethod: undefined,
       paidAmount: 0,
       bankTransactionId: undefined,
       paidAt: undefined,
@@ -3616,6 +3704,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...txn,
       matchedTuitionId: undefined,
       matchedStudentName: undefined,
+      matchedPaymentReference: undefined,
       reconciliationStatus: 'unmatched' as const,
       reconciledAt: undefined,
       notes: 'Đã hủy liên kết đối soát',

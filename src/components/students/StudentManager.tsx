@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Upload,
   X,
 } from 'lucide-react';
@@ -972,7 +973,12 @@ export const StudentManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md transition-colors"
+                  disabled={enrolledClasses.length === 0}
+                  className={`px-5 py-2.5 rounded-xl font-bold shadow-md transition-all ${
+                    enrolledClasses.length === 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer active:scale-98'
+                  }`}
                 >
                   Lưu học sinh
                 </button>

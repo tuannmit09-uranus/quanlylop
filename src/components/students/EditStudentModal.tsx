@@ -442,7 +442,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
                     <div className="flex-1 min-w-0">
                       <span className="block truncate text-xs">{cls.name}</span>
                       <span className="text-[10px] text-slate-400 block font-normal">
-                        Mã: {cls.code} • {cls.subject}
+                        {cls.subjectName}{cls.gradeLevel ? ` • ${cls.gradeLevel}` : ''}
                       </span>
                     </div>
                   </label>

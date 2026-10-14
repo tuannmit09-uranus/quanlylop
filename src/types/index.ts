@@ -307,6 +307,7 @@ export interface TuitionItem {
   adjustmentReason?: string;
   paidAmount: number;
   status: TuitionStatus;
+  paymentMethod?: 'qr' | 'cash'; // 'qr' (Quét QR qua đối soát tự động) | 'cash' (Tiền mặt qua thủ công)
   paymentReference: string; // Standard Bank Format (No underscores): SCHK09DucAnhT92026 or PBCK10TuanT72026
   lockedAt?: string;
   paidAt?: string;

@@ -79,7 +79,11 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
   const [showManualMatchModal, setShowManualMatchModal] = useState<boolean>(false);
   const [selectedTxnForMatch, setSelectedTxnForMatch] = useState<BankTransaction | null>(null);
   const [showSimulateModal, setShowSimulateModal] = useState<boolean>(false);
-  const [reconResultModal, setReconResultModal] = useState<{ matchedCount: number; discrepancyCount: number } | null>(null);
+  const [reconResultModal, setReconResultModal] = useState<{
+    matchedCount: number;
+    discrepancyCount: number;
+    skippedAlreadyPaidCount?: number;
+  } | null>(null);
   const [showConfirmClear, setShowConfirmClear] = useState<boolean>(false);
 
   // Filter & Search
@@ -215,7 +219,7 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Import sao kê ngân hàng theo file Excel (STT, Ngày giao dịch, Số tiền, Nội dung), quản lý và đối soát theo từng tháng
+            Import sao kê ngân hàng theo file Excel (STT, Ngày giao dịch, Số tiền, Nội dung). Hệ thống chỉ báo khớp khi <strong>Nội dung chuyển khoản QR trùng 100%</strong> trong nội dung sao kê và số tiền khớp hoàn toàn. Những học sinh đã đánh dấu <strong>Đã nộp</strong> từ trước sẽ tự động được giữ nguyên và bỏ qua, không đối soát lại.
           </p>
         </div>
 
@@ -585,7 +589,7 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
                           <div className="space-y-1">
                             <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                               <CheckCircle2 className="w-3 h-3" />
-                              <span>{tx.reconciliationStatus === 'manual_matched' ? 'Khớp thủ công' : 'Khớp nội dung & tiền'}</span>
+                              <span>{tx.reconciliationStatus === 'manual_matched' ? 'Khớp thủ công' : 'Khớp 100% mã QR & tiền'}</span>
                             </span>
                             {tx.matchedStudentName && (
                               <div>
@@ -604,12 +608,19 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
                           <div className="space-y-1">
                             <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
                               <AlertTriangle className="w-3 h-3" />
-                              <span>Lệch số tiền</span>
+                              <span>Khớp QR - Lệch tiền</span>
                             </span>
                             {tx.matchedStudentName && (
-                              <span className="font-bold text-slate-900 block text-xs">
-                                {tx.matchedStudentName}
-                              </span>
+                              <div>
+                                <span className="font-bold text-slate-900 block text-xs">
+                                  {tx.matchedStudentName}
+                                </span>
+                                {tx.matchedPaymentReference && (
+                                  <span className="font-mono text-[10px] text-amber-700 block">
+                                    {tx.matchedPaymentReference}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         ) : (
@@ -809,7 +820,7 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 font-medium flex items-center space-x-1.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Khớp học phí thành công:</span>
+                  <span>Khớp 100% mã QR & số tiền:</span>
                 </span>
                 <span className="font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                   {reconResultModal.matchedCount} giao dịch
@@ -819,15 +830,35 @@ export const ReconciliationPage: React.FC<ReconciliationPageProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 font-medium flex items-center space-x-1.5">
                   <AlertCircle className="w-4 h-4 text-amber-500" />
-                  <span>Lệch số tiền cần kiểm tra:</span>
+                  <span>Trùng mã QR nhưng lệch số tiền:</span>
                 </span>
                 <span className="font-black text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                   {reconResultModal.discrepancyCount} giao dịch
                 </span>
               </div>
 
-              <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
-                ✓ Trạng thái học phí của các học sinh khớp lệnh đã được tự động chuyển sang <strong className="text-emerald-700">&quot;Đã nộp&quot;</strong>.
+              {(reconResultModal.skippedAlreadyPaidCount ?? 0) > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 font-medium flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-blue-500" />
+                    <span>Đã nộp từ trước (bỏ qua):</span>
+                  </span>
+                  <span className="font-black text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                    {reconResultModal.skippedAlreadyPaidCount} học sinh
+                  </span>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed space-y-1">
+                <div>
+                  ✓ Trạng thái học phí của các học sinh khớp lệnh đã được tự động chuyển sang <strong className="text-emerald-700">&quot;Đã nộp&quot;</strong>.
+                </div>
+                <div>
+                  ✓ Những học sinh đã được đánh dấu <strong className="text-blue-700">&quot;Đã nộp&quot;</strong> từ trước được tự động bỏ qua, không đối soát lại để bảo toàn dữ liệu.
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  * Hệ thống chỉ báo khớp khi mã QR chuyển khoản trùng khớp 100% trong nội dung sao kê. Các giao dịch không trùng mã QR được giữ nguyên &quot;Chưa gán học phí&quot;.
+                </div>
               </div>
             </div>
 

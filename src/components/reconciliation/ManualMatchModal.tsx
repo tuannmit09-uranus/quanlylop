@@ -166,7 +166,7 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
                       <div className="flex items-center space-x-3 text-[11px] text-slate-500 font-mono">
                         <span>Mã QR: {tui.paymentReference}</span>
                         <span>•</span>
-                        <span>{tui.totalSessions} buổi học</span>
+                        <span>{tui.sessionCount || 0} buổi học</span>
                       </div>
                     </div>
 

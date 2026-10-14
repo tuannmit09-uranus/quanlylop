@@ -123,8 +123,8 @@ const AppContent: React.FC = () => {
     if (tab === 'sessions' && params) {
       setSessionFilterParams(params);
     }
-    if ((tab === 'tuition' || tab === 'tuition-history') && params) {
-      setTuitionFilterParams(params);
+    if (tab === 'tuition' || tab === 'tuition-history') {
+      setTuitionFilterParams(params || null);
     }
     if ((tab === 'reconciliation' || tab === 'bank-statements') && params) {
       setReconciliationFilterParams(params);

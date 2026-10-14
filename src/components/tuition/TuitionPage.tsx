@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TuitionItem } from '../../types';
 import { formatVND } from '../../utils/vietqr';
@@ -16,6 +16,8 @@ import {
   Calendar,
   FileText,
   Clock,
+  Banknote,
+  Building2,
 } from 'lucide-react';
 import { VietQRModal } from './VietQRModal';
 import { TuitionPdfExportModal } from './TuitionPdfExportModal';
@@ -51,26 +53,75 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
 
-  // Pick month from props or existing data, default to current month / year
+  // Find most frequent or relevant period for this tenant if not current month
+  const mostRelevantPeriod = useMemo(() => {
+    const tenantItems = tuitionItems.filter((t) => t.tenant_id === currentTenant?.id);
+    if (tenantItems.length === 0) return { month: currentMonth, year: currentYear };
+    const periodCounts = new Map<string, { month: number; year: number; count: number }>();
+    tenantItems.forEach((t) => {
+      const key = `${t.periodMonth}-${t.periodYear}`;
+      const existing = periodCounts.get(key) || { month: t.periodMonth, year: t.periodYear, count: 0 };
+      existing.count += 1;
+      periodCounts.set(key, existing);
+    });
+    const curKey = `${currentMonth}-${currentYear}`;
+    if (periodCounts.has(curKey)) {
+      return { month: currentMonth, year: currentYear };
+    }
+    let best = { month: currentMonth, year: currentYear, count: 0 };
+    periodCounts.forEach((val) => {
+      if (val.count > best.count) {
+        best = val;
+      }
+    });
+    return { month: best.month, year: best.year };
+  }, [tuitionItems, currentTenant?.id, currentMonth, currentYear]);
+
+  // Pick month & year with priority: props -> sessionStorage -> most relevant period
   const defaultMonth =
     initialMonth ??
-    (tuitionItems.some((t) => t.periodMonth === currentMonth && t.periodYear === currentYear)
-      ? currentMonth
-      : tuitionItems.length > 0
-      ? tuitionItems[0].periodMonth
-      : currentMonth);
+    (() => {
+      try {
+        const saved = sessionStorage.getItem(`edututor_tuition_month_${currentTenant?.id}`);
+        if (saved && !isNaN(Number(saved))) return Number(saved);
+      } catch {}
+      return mostRelevantPeriod.month;
+    })();
+
   const defaultYear =
     initialYear ??
-    (tuitionItems.some((t) => t.periodMonth === currentMonth && t.periodYear === currentYear)
-      ? currentYear
-      : tuitionItems.length > 0
-      ? tuitionItems[0].periodYear
-      : currentYear);
+    (() => {
+      try {
+        const saved = sessionStorage.getItem(`edututor_tuition_year_${currentTenant?.id}`);
+        if (saved && !isNaN(Number(saved))) return Number(saved);
+      } catch {}
+      return mostRelevantPeriod.year;
+    })();
+
+  const defaultSchool =
+    initialSchool ??
+    (() => {
+      try {
+        const saved = sessionStorage.getItem(`edututor_tuition_school_${currentTenant?.id}`);
+        if (saved) return saved;
+      } catch {}
+      return 'ALL';
+    })();
+
+  const defaultClassId =
+    initialClassId ??
+    (() => {
+      try {
+        const saved = sessionStorage.getItem(`edututor_tuition_class_${currentTenant?.id}`);
+        if (saved) return saved;
+      } catch {}
+      return 'ALL';
+    })();
 
   const [selectedMonth, setSelectedMonth] = useState<number>(defaultMonth);
   const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
-  const [selectedSchool, setSelectedSchool] = useState<string>(initialSchool || 'ALL');
-  const [selectedClassId, setSelectedClassId] = useState<string>(initialClassId || 'ALL');
+  const [selectedSchool, setSelectedSchool] = useState<string>(defaultSchool);
+  const [selectedClassId, setSelectedClassId] = useState<string>(defaultClassId);
   const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus || 'ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [isCalculating, setIsCalculating] = useState(false);
@@ -83,6 +134,18 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
     if (initialClassId !== undefined) setSelectedClassId(initialClassId);
     if (initialStatus !== undefined) setSelectedStatus(initialStatus);
   }, [initialMonth, initialYear, initialSchool, initialClassId, initialStatus]);
+
+  // Persist current selection so navigating away and returning preserves the exact state without jumping
+  useEffect(() => {
+    try {
+      if (currentTenant?.id) {
+        sessionStorage.setItem(`edututor_tuition_month_${currentTenant.id}`, String(selectedMonth));
+        sessionStorage.setItem(`edututor_tuition_year_${currentTenant.id}`, String(selectedYear));
+        sessionStorage.setItem(`edututor_tuition_school_${currentTenant.id}`, selectedSchool);
+        sessionStorage.setItem(`edututor_tuition_class_${currentTenant.id}`, selectedClassId);
+      }
+    } catch {}
+  }, [currentTenant?.id, selectedMonth, selectedYear, selectedSchool, selectedClassId]);
 
   // Auto-reset selectedClassId if it does not belong to the current active tenant classes
   useEffect(() => {
@@ -121,27 +184,60 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
     return true;
   });
 
+  // Helper to determine payment method:
+  // - 'qr' if marked via automated reconciliation (or bankTransactionId)
+  // - 'cash' if marked manually
+  const getTuitionPaymentMethod = (t: TuitionItem): 'qr' | 'cash' | null => {
+    if (t.status !== 'paid') return null;
+    if (t.paymentMethod === 'qr') return 'qr';
+    if (t.paymentMethod === 'cash') return 'cash';
+    // Fallback: If bankTransactionId exists, it was reconciled from bank statement
+    if (t.bankTransactionId) return 'qr';
+    // Default for manual marking
+    return 'cash';
+  };
+
   // Fixed Card KPIs based strictly on school/class/month/year scope:
   const totalExpected = scopedTuitions.reduce((acc, cur) => acc + cur.totalAmount, 0);
   const paidTuitions = scopedTuitions.filter((t) => t.status === 'paid');
-  const totalCollected = paidTuitions.reduce(
+
+  // Tách Card Đã thu tiền thành 2:
+  // 1. Thu qua ngân hàng (Quét QR sao kê)
+  const bankPaidTuitions = paidTuitions.filter((t) => getTuitionPaymentMethod(t) === 'qr');
+  const bankCollected = bankPaidTuitions.reduce(
     (acc, cur) => acc + (cur.paidAmount || cur.totalAmount),
     0
   );
+  const bankPaidCount = bankPaidTuitions.length;
+
+  // 2. Thu Tiền mặt (Thủ công)
+  const cashPaidTuitions = paidTuitions.filter((t) => getTuitionPaymentMethod(t) === 'cash');
+  const cashCollected = cashPaidTuitions.reduce(
+    (acc, cur) => acc + (cur.paidAmount || cur.totalAmount),
+    0
+  );
+  const cashPaidCount = cashPaidTuitions.length;
+
+  const totalCollected = bankCollected + cashCollected;
   const unpaidTuitions = scopedTuitions.filter((t) => t.status !== 'paid');
   const totalUnpaid = Math.max(0, totalExpected - totalCollected);
   const unpaidCount = unpaidTuitions.length;
 
   // 2. Filtered tuitions for the Table / List: applies selectedStatus & searchTerm
   const filteredTuitions = scopedTuitions.filter((t) => {
-    // Trạng thái filter (Chưa nộp matches both 'unpaid' and 'draft')
+    // Trạng thái & Hình thức nộp filter
+    const method = getTuitionPaymentMethod(t);
     const matchesStatus =
       selectedStatus === 'ALL'
         ? true
         : selectedStatus === 'unpaid'
-        ? t.status === 'unpaid' || t.status === 'draft'
+        ? t.status !== 'paid' && t.status !== 'partial'
         : selectedStatus === 'paid'
         ? t.status === 'paid'
+        : selectedStatus === 'paid_qr'
+        ? t.status === 'paid' && method === 'qr'
+        : selectedStatus === 'paid_cash'
+        ? t.status === 'paid' && method === 'cash'
         : selectedStatus === 'partial'
         ? t.status === 'partial'
         : t.status === selectedStatus;
@@ -154,7 +250,9 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
         (t.studentName || '').toLowerCase().includes(q) ||
         (t.paymentReference || '').toLowerCase().includes(q) ||
         (t.className || '').toLowerCase().includes(q) ||
-        (t.schoolCode || '').toLowerCase().includes(q);
+        (t.schoolCode || '').toLowerCase().includes(q) ||
+        (method === 'qr' && 'quét qr ngân hàng'.includes(q)) ||
+        (method === 'cash' && 'tiền mặt thủ công'.includes(q));
       if (!matchesSearch) return false;
     }
 
@@ -182,11 +280,14 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = 'STT,Họ tên,Mã trường,Khóa,Lớp,Số buổi,Đơn giá/buổi,Thành tiền,Mã VietQR,Trạng thái\n';
+    const headers = 'STT,Họ tên,Mã trường,Khóa,Lớp,Số buổi,Đơn giá/buổi,Thành tiền,Mã VietQR,Trạng thái,Hình thức Nộp\n';
     const rows = filteredTuitions
       .map(
-        (t, idx) =>
-          `${idx + 1},"${t.studentName}","${t.schoolCode}","K${String(t.birthYear).slice(-2)}","${t.className}",${t.sessionCount},${t.feePerSession},${t.totalAmount},"${t.paymentReference}","${t.status}"`
+        (t, idx) => {
+          const method = getTuitionPaymentMethod(t);
+          const methodStr = method === 'qr' ? 'Quét QR' : method === 'cash' ? 'Tiền mặt' : '';
+          return `${idx + 1},"${t.studentName}","${t.schoolCode}","K${String(t.birthYear).slice(-2)}","${t.className}",${t.sessionCount},${t.feePerSession},${t.totalAmount},"${t.paymentReference}","${t.status === 'paid' ? 'Đã nộp' : t.status === 'partial' ? 'Nộp một phần' : 'Chưa nộp'}","${methodStr}"`;
+        }
       )
       .join('\n');
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -275,28 +376,70 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
         </div>
       </div>
 
-      {/* Summary KPI Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-          <span className="text-xs font-semibold text-slate-500">Tổng doanh thu dự kiến (T{selectedMonth})</span>
-          <p className="text-2xl font-black text-slate-900 mt-1">{formatVND(totalExpected)}</p>
-          <span className="text-[11px] text-slate-400 mt-0.5 block">
+      {/* Summary KPI Banner: 4 Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Tổng doanh thu dự kiến */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Tổng doanh thu dự kiến (T{selectedMonth})</span>
+            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+              <Calendar className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-slate-900 mt-2">{formatVND(totalExpected)}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">
             {scopedTuitions.length} học sinh có số buổi tính phí &gt; 0
           </span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-          <span className="text-xs font-semibold text-slate-500">Đã thu qua ngân hàng / tiền mặt</span>
-          <p className="text-2xl font-black text-emerald-600 mt-1">{formatVND(totalCollected)}</p>
-          <span className="text-[11px] text-emerald-600 font-semibold mt-0.5 block">
-            Đã hoàn tất {paidTuitions.length} học sinh
-          </span>
+        {/* Card 2: Thu qua ngân hàng (Quét QR sao kê) */}
+        <div className="bg-white p-5 rounded-2xl border border-indigo-100 bg-gradient-to-br from-white to-indigo-50/30 shadow-2xs hover:border-indigo-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-indigo-950">Thu qua ngân hàng</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <QrCode className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-indigo-600 mt-2">{formatVND(bankCollected)}</p>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[11px] text-indigo-700 font-semibold">
+              {bankPaidCount} học sinh
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold">
+              Quét QR
+            </span>
+          </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-          <span className="text-xs font-semibold text-slate-500">Chưa nộp học phí</span>
-          <p className="text-2xl font-black text-amber-600 mt-1">{formatVND(totalUnpaid)}</p>
-          <span className="text-[11px] text-amber-700 font-semibold mt-0.5 block">
+        {/* Card 3: Thu Tiền mặt (Thủ công) */}
+        <div className="bg-white p-5 rounded-2xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/30 shadow-2xs hover:border-emerald-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-950">Thu Tiền mặt</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <Banknote className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-emerald-600 mt-2">{formatVND(cashCollected)}</p>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[11px] text-emerald-700 font-semibold">
+              {cashPaidCount} học sinh
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+              Tiền mặt
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Chưa nộp học phí */}
+        <div className="bg-white p-5 rounded-2xl border border-amber-100 bg-gradient-to-br from-white to-amber-50/30 shadow-2xs hover:border-amber-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-950">Chưa nộp học phí</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <AlertCircle className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-amber-600 mt-2">{formatVND(totalUnpaid)}</p>
+          <span className="text-[11px] text-amber-700 font-semibold mt-1 block">
             {unpaidCount} học sinh cần thu
           </span>
         </div>
@@ -370,7 +513,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
             </select>
           </div>
 
-          {/* Status filter */}
+          {/* Status & Payment Method filter */}
           <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
             <span className="text-xs font-bold text-slate-700">Trạng thái:</span>
             <select
@@ -378,9 +521,11 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="text-xs font-bold bg-transparent border-0 focus:ring-0 outline-hidden cursor-pointer text-slate-800"
             >
-              <option value="ALL">Tất cả trạng thái</option>
-              <option value="unpaid">Chưa nộp (Unpaid)</option>
-              <option value="paid">Đã nộp (Paid)</option>
+              <option value="ALL">Tất cả trạng thái & hình thức</option>
+              <option value="unpaid">Chưa nộp ({unpaidCount})</option>
+              <option value="paid">Đã nộp: Tất cả ({paidTuitions.length})</option>
+              <option value="paid_qr">Đã nộp: Quét QR ({bankPaidCount})</option>
+              <option value="paid_cash">Đã nộp: Tiền mặt ({cashPaidCount})</option>
               <option value="partial">Nộp một phần</option>
             </select>
           </div>
@@ -428,7 +573,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
             </span>
             {selectedStatus !== 'ALL' && (
               <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
-                Lọc: {selectedStatus === 'unpaid' ? 'Chưa nộp' : selectedStatus === 'paid' ? 'Đã nộp' : 'Nộp một phần'}
+                Lọc: {selectedStatus === 'unpaid' ? 'Chưa nộp' : selectedStatus === 'paid' ? 'Đã nộp (Tất cả)' : selectedStatus === 'paid_qr' ? 'Đã nộp: Quét QR' : selectedStatus === 'paid_cash' ? 'Đã nộp: Tiền mặt' : 'Nộp một phần'}
               </span>
             )}
             {selectedClassId !== 'ALL' && (
@@ -524,6 +669,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                 <th className="py-3 px-4">Thành tiền (VNĐ)</th>
                 <th className="py-3 px-4">Mã VietQR Chuyển khoản</th>
                 <th className="py-3 px-4">Trạng thái</th>
+                <th className="py-3 px-4">Hình thức Nộp</th>
                 <th className="py-3 px-4 text-right">Thao tác</th>
               </tr>
             </thead>
@@ -536,7 +682,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                   <td className="py-3.5 px-4">
                     <span className="font-bold text-slate-900 block">{tui.studentName}</span>
                     <span className="text-[11px] text-slate-400">
-                      DOB: {tui.dob || `Năm ${tui.birthYear}`}
+                      Năm sinh: {tui.birthYear || '---'}
                     </span>
                   </td>
 
@@ -600,11 +746,35 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                     </span>
                   </td>
 
-                  <td className="py-3.5 px-4 text-right space-x-1.5">
+                  {/* Cột: Hình thức Nộp */}
+                  <td className="py-3.5 px-4">
+                    {(() => {
+                      const method = getTuitionPaymentMethod(tui);
+                      if (tui.status === 'paid') {
+                        if (method === 'qr') {
+                          return (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold inline-flex items-center space-x-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
+                              <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Quét QR</span>
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-bold inline-flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                            <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Tiền mặt</span>
+                          </span>
+                        );
+                      }
+                      return <span className="text-slate-400 text-xs italic">—</span>;
+                    })()}
+                  </td>
+
+                  <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
                     <button
                       type="button"
                       onClick={() => setSelectedTuitionForQR(tui)}
-                      className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs transition-colors"
+                      className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs transition-colors cursor-pointer"
                       title="Mở mã QR nộp học phí"
                     >
                       <QrCode className="w-3.5 h-3.5" />
@@ -614,21 +784,21 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                     {tui.status !== 'paid' ? (
                       <button
                         type="button"
-                        onClick={() => updateTuitionStatus(tui.id, 'paid')}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs transition-colors"
-                        title="Đánh dấu đã nộp học phí"
+                        onClick={() => updateTuitionStatus(tui.id, 'paid', undefined, 'cash')}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs transition-colors cursor-pointer"
+                        title="Đánh dấu đã nộp học phí bằng tiền mặt (thủ công)"
                       >
                         <CheckCheck className="w-3.5 h-3.5" />
-                        <span>Đã nộp</span>
+                        <span>Thu tiền mặt</span>
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={() => updateTuitionStatus(tui.id, 'unpaid')}
-                        className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
                         title="Hoàn tác về chưa nộp"
                       >
-                        ✕
+                        <span>✕ Hoàn tác</span>
                       </button>
                     )}
                   </td>
@@ -698,6 +868,24 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                     {tui.paymentReference}
                   </span>
                 </div>
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-500 text-[11px]">Hình thức Nộp:</span>
+                  {tui.status === 'paid' ? (
+                    getTuitionPaymentMethod(tui) === 'qr' ? (
+                      <span className="inline-flex items-center space-x-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                        <QrCode className="w-3 h-3 text-indigo-600" />
+                        <span>Quét QR</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center space-x-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                        <Banknote className="w-3 h-3 text-emerald-600" />
+                        <span>Tiền mặt</span>
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-slate-400 text-xs italic">—</span>
+                  )}
+                </div>
               </div>
 
               {/* Mobile Action Buttons */}
@@ -714,11 +902,11 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
                 {tui.status !== 'paid' ? (
                   <button
                     type="button"
-                    onClick={() => updateTuitionStatus(tui.id, 'paid')}
+                    onClick={() => updateTuitionStatus(tui.id, 'paid', undefined, 'cash')}
                     className="flex-1 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs active:scale-98 transition-all cursor-pointer"
                   >
                     <CheckCheck className="w-4 h-4" />
-                    <span>Xác nhận nộp</span>
+                    <span>Thu tiền mặt</span>
                   </button>
                 ) : (
                   <button

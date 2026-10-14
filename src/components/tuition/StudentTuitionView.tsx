@@ -173,10 +173,19 @@ export const StudentTuitionView: React.FC = () => {
                           Học phí Tháng {tui.periodMonth}/{tui.periodYear}
                         </h3>
                         {isPaid ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center space-x-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Đã thanh toán</span>
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center space-x-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Đã thanh toán</span>
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                              tui.paymentMethod === 'qr' || tui.bankTransactionId
+                                ? 'bg-indigo-100 text-indigo-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {tui.paymentMethod === 'qr' || tui.bankTransactionId ? 'Quét QR' : 'Tiền mặt'}
+                            </span>
+                          </div>
                         ) : isPartial ? (
                           <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
                             Nộp một phần

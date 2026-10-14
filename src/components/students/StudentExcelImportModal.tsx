@@ -308,7 +308,7 @@ export const StudentExcelImportModal: React.FC<StudentExcelImportModalProps> = (
               <option value="">-- Vui lòng chọn Lớp học (Bắt buộc) --</option>
               {classes.map((cls) => (
                 <option key={cls.id} value={cls.id}>
-                  {cls.name} ({cls.subject})
+                  {cls.name} ({cls.subjectName || 'Lớp'})
                 </option>
               ))}
             </select>
