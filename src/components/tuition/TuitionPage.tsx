@@ -152,12 +152,35 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
     } catch {}
   }, [currentTenant?.id, selectedMonth, selectedYear, selectedSchool, selectedClassId]);
 
-  // Auto-reset selectedClassId if it does not belong to the current active tenant classes
+  // Auto-reset selectedClassId ONLY when classes have finished loading and the class doesn't belong to current tenant
   useEffect(() => {
-    if (selectedClassId !== 'ALL' && !classes.some((c) => c.id === selectedClassId)) {
+    if (classes.length > 0 && selectedClassId !== 'ALL' && !classes.some((c) => c.id === selectedClassId)) {
       setSelectedClassId('ALL');
     }
   }, [classes, selectedClassId]);
+
+  // Restore saved class from sessionStorage once classes finish loading if currently 'ALL' and not set via initialClassId prop
+  useEffect(() => {
+    if (classes.length > 0 && selectedClassId === 'ALL' && !initialClassId) {
+      try {
+        const saved = sessionStorage.getItem(`edututor_tuition_class_${currentTenant?.id}`);
+        if (saved && saved !== 'ALL' && classes.some((c) => c.id === saved)) {
+          setSelectedClassId(saved);
+        }
+      } catch {}
+    }
+  }, [classes, currentTenant?.id, initialClassId]);
+
+  // Auto-synchronize tuition with actual attendance records on load and when period or class changes
+  useEffect(() => {
+    if (calculateTuitionForMonth && classes.length > 0) {
+      calculateTuitionForMonth(
+        selectedMonth,
+        selectedYear,
+        selectedClassId !== 'ALL' ? selectedClassId : undefined
+      );
+    }
+  }, [selectedMonth, selectedYear, selectedClassId, currentTenant?.id, classes.length]);
 
   const [selectedTuitionForQR, setSelectedTuitionForQR] = useState<TuitionItem | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
@@ -406,15 +429,30 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
         {/* Card 1: Tổng doanh thu dự kiến */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Tổng doanh thu dự kiến (T{selectedMonth})</span>
+            <span className="text-xs font-semibold text-slate-500">
+              {selectedClassId !== 'ALL'
+                ? `Doanh thu dự kiến - ${classes.find((c) => c.id === selectedClassId)?.name || 'Lớp'}`
+                : `Tổng doanh thu dự kiến (T${selectedMonth})`}
+            </span>
             <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
           </div>
           <p className="text-2xl font-black text-slate-900 mt-2">{formatVND(totalExpected)}</p>
-          <span className="text-[11px] text-slate-400 mt-1 block">
-            {scopedTuitions.length} học sinh có số buổi tính phí &gt; 0
-          </span>
+          <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
+            <span>
+              {scopedTuitions.length} học sinh có số buổi tính phí &gt; 0
+            </span>
+            {selectedClassId === 'ALL' ? (
+              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
+                Tất cả {classes.length} lớp
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px]">
+                {classes.find((c) => c.id === selectedClassId)?.name}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Card 2: Thu qua ngân hàng (Quét QR sao kê) */}

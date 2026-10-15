@@ -3016,7 +3016,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Strictly filter classes belonging to the current tenant
     const targetClasses = classFilterId
       ? classes.filter((c) => c.id === classFilterId && c.tenant_id === currentTenant.id)
-      : classes.filter((c) => c.status === 'active' && c.tenant_id === currentTenant.id);
+      : classes.filter((c) => c.tenant_id === currentTenant.id && c.status !== 'archived');
 
     const generatedItems: TuitionItem[] = [];
 
@@ -3026,7 +3026,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const student = students.find((s) => s.id === studentId);
         if (!student) return;
         // Strictly require student to belong to the current active tenant
-        if (student.tenant_id !== currentTenant.id) return;
+        if (student.tenant_id && student.tenant_id !== currentTenant.id) return;
 
         if (Array.isArray(student.enrolledClassIds) && student.enrolledClassIds.length > 0 && !student.enrolledClassIds.includes(cls.id)) {
           return;
@@ -3035,14 +3035,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Find sessions of this class in this month/year with feeEligible === true where student is marked 'present'
         const studentPresentSessions = lessonSessions.filter((s) => {
           if (s.classId !== cls.id) return false;
-          if (s.tenant_id !== currentTenant.id) return false;
+          if (s.tenant_id && s.tenant_id !== currentTenant.id) return false;
           if (!s.feeEligible) return false;
           if (s.status === 'cancelled') return false;
           const [sYear, sMonth] = s.date.split('-').map(Number);
           if (sYear !== year || sMonth !== month) return false;
 
           const attRecord = attendance.find(
-            (a) => a.sessionId === s.id && a.studentId === studentId && a.tenant_id === currentTenant.id
+            (a) => a.sessionId === s.id && a.studentId === studentId && (!a.tenant_id || a.tenant_id === currentTenant.id)
           );
           return attRecord?.status === 'present';
         });
@@ -3125,7 +3125,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [...remaining, ...generatedItems];
     });
 
-    generatedItems.forEach((item) => syncSaveToFirestore('tuitions', item.id, item));
+    const changedItems = generatedItems.filter((item) => {
+      const cur = tuitionItems.find((t) => t.id === item.id);
+      if (!cur) return true;
+      return (
+        cur.sessionCount !== item.sessionCount ||
+        cur.totalAmount !== item.totalAmount ||
+        cur.feePerSession !== item.feePerSession ||
+        (cur.eligibleSessionIds || []).length !== (item.eligibleSessionIds || []).length
+      );
+    });
+    changedItems.forEach((item) => syncSaveToFirestore('tuitions', item.id, item));
 
     addAuditLog(
       'update',
