@@ -8,8 +8,6 @@ import {
   Loader2,
   CheckCircle2,
 } from 'lucide-react';
-import { storage } from '../../lib/firebase';
-import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 
 interface UserGuideModalProps {
   isOpen: boolean;
@@ -18,7 +16,8 @@ interface UserGuideModalProps {
 }
 
 export const YOUTUBE_BANK_STATEMENT_GUIDE_URL = 'https://www.youtube.com/watch?v=lBMk39wyZzU';
-export const DEFAULT_GUIDE_PDF_URL = '/HDSD_PM_diemdanh.pdf';
+export const DEFAULT_GUIDE_PDF_URL =
+  'https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0853056811.firebasestorage.app/o/HDSD_PM_diemdanh.pdf?alt=media&token=f612538a-f281-41ba-96f6-08b6e71644e8';
 export const STORAGE_PDF_FILENAME = 'HDSD_PM_diemdanh.pdf';
 
 export const UserGuideModal: React.FC<UserGuideModalProps> = ({
@@ -36,18 +35,9 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
     setDownloadSuccess(false);
 
     try {
-      let downloadUrl = '';
+      const downloadUrl = DEFAULT_GUIDE_PDF_URL;
 
-      // 1. Fetch signed download URL from Firebase Storage: gs://gen-lang-client-0853056811.firebasestorage.app/HDSD_PM_diemdanh.pdf
-      try {
-        const fileRef = storageRef(storage, STORAGE_PDF_FILENAME);
-        downloadUrl = await getDownloadURL(fileRef);
-      } catch (storageErr) {
-        console.warn('Firebase Storage getDownloadURL notice (falling back to direct/local):', storageErr);
-        downloadUrl = DEFAULT_GUIDE_PDF_URL;
-      }
-
-      // 2. Download as blob to guarantee exact filename "HDSD_PM_diemdanh.pdf"
+      // 1. Try blob download to enforce exact filename HDSD_PM_diemdanh.pdf
       try {
         const res = await fetch(downloadUrl);
         if (res.ok) {
@@ -65,12 +55,12 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
           return;
         }
       } catch (blobErr) {
-        console.warn('Blob fetch failed, falling back to direct anchor:', blobErr);
+        console.warn('Blob download fetch notice (falling back to direct anchor):', blobErr);
       }
 
-      // 3. Fallback direct anchor click
+      // 2. Direct anchor click fallback
       const link = document.createElement('a');
-      link.href = downloadUrl || DEFAULT_GUIDE_PDF_URL;
+      link.href = downloadUrl;
       link.download = STORAGE_PDF_FILENAME;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
@@ -80,8 +70,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
       setDownloadSuccess(true);
       setTimeout(() => setDownloadSuccess(false), 3000);
     } catch (err) {
-      console.error('Download execution error:', err);
-      // Final resilient fallback
+      console.error('Download error:', err);
       window.open(DEFAULT_GUIDE_PDF_URL, '_blank');
     } finally {
       setIsDownloading(false);
@@ -132,7 +121,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
             onClick={handleDownloadPDF}
             disabled={isDownloading}
             className="inline-flex items-center justify-center space-x-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs sm:text-sm transition-all shadow-xs shrink-0 cursor-pointer disabled:opacity-60 active:scale-98"
-            title="Tải đúng file PDF HDSD_PM_diemdanh.pdf từ Firebase Storage"
+            title="Tải đúng file PDF HDSD_PM_diemdanh.pdf"
           >
             {isDownloading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
