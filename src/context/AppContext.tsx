@@ -409,6 +409,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [lessonSessions, setLessonSessions] = useState<LessonSession[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [isAttendanceLoaded, setIsAttendanceLoaded] = useState(false);
   const [evaluations, setEvaluations] = useState<StudentEvaluation[]>([]);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [submissions, setSubmissions] = useState<HomeworkSubmission[]>([]);
@@ -540,6 +541,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           subscribeToCollection<AttendanceRecord>('attendance', (items) => {
             const deleted = getDeletedTenantIdsLocal();
             setAttendance((items || []).filter((at) => !at.tenant_id || !deleted.has(at.tenant_id)));
+            setIsAttendanceLoaded(true);
           }),
           subscribeToCollection<StudentEvaluation>('evaluations', (items) => {
             const deleted = getDeletedTenantIdsLocal();
@@ -738,6 +740,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    if (!isAttendanceLoaded) return;
     if (periods.size === 0) return;
 
     setTuitionItems((prev) => {
@@ -800,10 +803,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
 
             if (existingIdx >= 0) {
-              // PRESERVE EXISTING TUITION RECORD:
-              // Tuitions in Firestore are authoritative. Background attendance changes must NEVER
-              // mutate or overwrite sessionCount or totalAmount of existing tuition records.
-              // This completely eliminates the bug where Card 'Tổng Doanh thu dự kiến' jumps when navigating between features.
               const existing = currentTuitions[existingIdx];
               let itemUpdated = false;
               let patchedItem = { ...existing };
@@ -816,15 +815,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 patchedItem.paymentReference = paymentReference;
                 itemUpdated = true;
               }
+              // Synchronize session count, total amount, and eligible sessions with actual attendance
+              if (
+                existing.sessionCount !== studentSessionCount ||
+                existing.totalAmount !== totalAmount ||
+                JSON.stringify(existing.eligibleSessionIds || []) !== JSON.stringify(studentSessionIds)
+              ) {
+                patchedItem.sessionCount = studentSessionCount;
+                patchedItem.totalAmount = totalAmount;
+                patchedItem.eligibleSessionIds = studentSessionIds;
+                if (studentSessionCount === 0 && !existing.bankTransactionId) {
+                  patchedItem.status = 'unpaid';
+                  patchedItem.paidAmount = 0;
+                  patchedItem.paidAt = null;
+                }
+                itemUpdated = true;
+              }
 
               if (itemUpdated) {
                 isChanged = true;
                 currentTuitions[existingIdx] = patchedItem;
+                syncSaveToFirestore('tuitions', patchedItem.id, patchedItem);
               }
             } else if (studentSessionCount > 0) {
               // Only create a new tuition item if there are actual attended sessions
               isChanged = true;
-              currentTuitions.push({
+              const newItem: TuitionItem = {
                 id: `tui-${studentId}-${cls.id}-${month}${year}`,
                 tenant_id: classTenantId,
                 periodMonth: month,
@@ -844,7 +860,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 paymentReference,
                 created_at: new Date().toISOString().split('T')[0],
                 updated_at: new Date().toISOString().split('T')[0],
-              });
+              };
+              currentTuitions.push(newItem);
+              syncSaveToFirestore('tuitions', newItem.id, newItem);
             }
           });
         });
@@ -3016,7 +3034,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Strictly filter classes belonging to the current tenant
     const targetClasses = classFilterId
       ? classes.filter((c) => c.id === classFilterId && c.tenant_id === currentTenant.id)
-      : classes.filter((c) => c.tenant_id === currentTenant.id && c.status !== 'archived');
+      : classes.filter((c) => c.tenant_id === currentTenant.id && c.status === 'active');
 
     const generatedItems: TuitionItem[] = [];
 
@@ -3083,6 +3101,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             totalAmount,
             feePerSession: cls.feePerSession,
             paymentReference,
+            status: sessionCount === 0 && !existing.bankTransactionId ? 'unpaid' : existing.status,
+            paidAmount: sessionCount === 0 && !existing.bankTransactionId ? 0 : existing.paidAmount,
+            paidAt: sessionCount === 0 && !existing.bankTransactionId ? null : existing.paidAt,
             updated_at: new Date().toISOString().split('T')[0],
           });
         } else {
@@ -3132,6 +3153,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cur.sessionCount !== item.sessionCount ||
         cur.totalAmount !== item.totalAmount ||
         cur.feePerSession !== item.feePerSession ||
+        cur.status !== item.status ||
+        cur.paidAmount !== item.paidAmount ||
         (cur.eligibleSessionIds || []).length !== (item.eligibleSessionIds || []).length
       );
     });

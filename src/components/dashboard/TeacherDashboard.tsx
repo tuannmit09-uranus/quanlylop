@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatVND } from '../../utils/vietqr';
 import { NavTabId } from '../layout/Sidebar';
@@ -45,30 +45,94 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     currentTenant,
   } = useApp();
 
-  // Selected Month & Year for Dashboard calculations (defaults to current month and year)
+  // Selected Month & Year for Dashboard calculations (syncs with sessionStorage and active tenant)
   const currentDate = new Date();
-  const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(() => {
+    try {
+      const saved = sessionStorage.getItem(`edututor_tuition_month_${currentTenant?.id}`);
+      if (saved && !isNaN(Number(saved))) return Number(saved);
+    } catch {}
+    // If no saved month, default to 9 if active data exists there or current month
+    const curMonth = currentDate.getMonth() + 1;
+    return curMonth;
+  });
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    try {
+      const saved = sessionStorage.getItem(`edututor_tuition_year_${currentTenant?.id}`);
+      if (saved && !isNaN(Number(saved))) return Number(saved);
+    } catch {}
+    return currentDate.getFullYear();
+  });
+
+  // Sync state if tenant changes or sessionStorage has newer selection
+  useEffect(() => {
+    if (currentTenant?.id) {
+      try {
+        const savedM = sessionStorage.getItem(`edututor_tuition_month_${currentTenant.id}`);
+        const savedY = sessionStorage.getItem(`edututor_tuition_year_${currentTenant.id}`);
+        if (savedM && !isNaN(Number(savedM))) setSelectedMonth(Number(savedM));
+        if (savedY && !isNaN(Number(savedY))) setSelectedYear(Number(savedY));
+      } catch {}
+    }
+  }, [currentTenant?.id]);
+
+  // Persist month & year to sessionStorage for smooth cross-page synchronization
+  useEffect(() => {
+    if (currentTenant?.id) {
+      try {
+        sessionStorage.setItem(`edututor_tuition_month_${currentTenant.id}`, String(selectedMonth));
+        sessionStorage.setItem(`edututor_tuition_year_${currentTenant.id}`, String(selectedYear));
+      } catch {}
+    }
+  }, [selectedMonth, selectedYear, currentTenant?.id]);
 
   // Calculations
   const activeStudents = students.filter((s) => s.status === 'active').length;
   const activeClasses = classes.filter((c) => c.status === 'active').length;
 
+  // Tenant Class IDs
+  const currentTenantClassIds = useMemo(() => new Set(classes.map((c) => c.id)), [classes]);
+
+  // Tenant-scoped tuition items with actual attended sessions (sessionCount > 0)
+  const tenantTuitionItems = useMemo(() => {
+    return tuitionItems.filter((t) => {
+      if (currentTenant?.id && t.tenant_id && t.tenant_id !== currentTenant.id) return false;
+      if (currentTenantClassIds.size > 0 && t.classId && !currentTenantClassIds.has(t.classId)) return false;
+      if ((t.sessionCount || 0) <= 0) return false;
+      return true;
+    });
+  }, [tuitionItems, currentTenant?.id, currentTenantClassIds]);
+
   // Filter tuition for selected Month & Year
-  const monthTuitions = tuitionItems.filter(
-    (t) => t.periodMonth === selectedMonth && t.periodYear === selectedYear
-  );
+  const monthTuitions = useMemo(() => {
+    return tenantTuitionItems.filter(
+      (t) => t.periodMonth === selectedMonth && t.periodYear === selectedYear
+    );
+  }, [tenantTuitionItems, selectedMonth, selectedYear]);
+
   const totalTuition = monthTuitions.reduce((acc, cur) => acc + cur.totalAmount, 0);
-  const collectedTuition = monthTuitions
-    .filter((t) => t.status === 'paid')
-    .reduce((acc, cur) => acc + (cur.paidAmount || cur.totalAmount), 0);
-  const uncollectedTuition = totalTuition - collectedTuition;
+  const collectedTuition = monthTuitions.reduce((acc, cur) => {
+    if (cur.status === 'paid') return acc + (cur.paidAmount || cur.totalAmount);
+    if (cur.status === 'partial') return acc + (cur.paidAmount || 0);
+    return acc;
+  }, 0);
+  const uncollectedTuition = Math.max(0, totalTuition - collectedTuition);
   const collectionRate = totalTuition > 0 ? Math.round((collectedTuition / totalTuition) * 100) : 0;
 
-  // Unpaid students list for this month
-  const unpaidTuitions = monthTuitions.filter(
-    (t) => t.status === 'unpaid' || t.status === 'partial' || t.status === 'draft'
-  );
+  // Unpaid students list for this month (strictly students with sessionCount > 0 who haven't fully paid)
+  const unpaidTuitions = monthTuitions.filter((t) => t.status !== 'paid');
+
+  // Unique count of unpaid students for this month
+  const unpaidStudentsCount = useMemo(() => {
+    const studentIds = new Set(unpaidTuitions.map((t) => t.studentId));
+    return studentIds.size;
+  }, [unpaidTuitions]);
+
+  // Unique count of active students with fee-eligible sessions in this month
+  const activeStudentsInMonthCount = useMemo(() => {
+    const studentIds = new Set(monthTuitions.map((t) => t.studentId));
+    return studentIds.size;
+  }, [monthTuitions]);
 
   // Academic average score
   const validScores = evaluations.filter((e) => e.classScore !== undefined).map((e) => e.classScore!);
@@ -210,7 +274,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             </div>
             <span className="text-xs text-slate-500 font-medium mt-3.5 block">
-              {monthTuitions.length > 0 ? monthTuitions.length : 125} bản ghi học phí
+              {activeStudentsInMonthCount} học sinh có số buổi tính phí &gt; 0
             </span>
           </div>
         </div>
@@ -250,7 +314,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {formatVND(uncollectedTuition)}
             </span>
             <p className="text-xs text-slate-400 mt-1">
-              Còn {unpaidTuitions.length} học sinh chưa hoàn tất
+              Còn {unpaidStudentsCount} học sinh chưa hoàn tất
             </p>
           </div>
         </div>
@@ -294,7 +358,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
       {/* Recharts Bar Chart: Monthly Tuition Revenue Trends (Current Fiscal Year) */}
       <TuitionRevenueChart
-        tuitionItems={tuitionItems}
+        tuitionItems={tenantTuitionItems}
         selectedYear={selectedYear}
         selectedMonth={selectedMonth}
         onSelectMonth={(m) => setSelectedMonth(m)}
@@ -378,7 +442,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-3 font-bold text-blue-700">
-                        {formatVND(tui.totalAmount)}
+                        {formatVND(Math.max(0, tui.totalAmount - (tui.paidAmount || 0)))}
+                        {tui.status === 'partial' && (
+                          <span className="block text-[10px] font-normal text-amber-600">
+                            (Đã trả {formatVND(tui.paidAmount || 0)})
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-3 font-mono font-bold text-amber-700">
                         {tui.paymentReference}

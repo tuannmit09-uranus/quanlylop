@@ -60,15 +60,17 @@ export const TuitionRevenueChart: React.FC<TuitionRevenueChartProps> = ({
     return Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
       const monthItems = tuitionItems.filter(
-        (t) => t.periodYear === selectedYear && t.periodMonth === m
+        (t) => t.periodYear === selectedYear && t.periodMonth === m && (t.sessionCount || 0) > 0
       );
 
       const totalExpected = monthItems.reduce((acc, cur) => acc + (cur.totalAmount || 0), 0);
-      const totalCollected = monthItems
-        .filter((t) => t.status === 'paid')
-        .reduce((acc, cur) => acc + (cur.paidAmount || cur.totalAmount || 0), 0);
+      const totalCollected = monthItems.reduce((acc, cur) => {
+        if (cur.status === 'paid') return acc + (cur.paidAmount || cur.totalAmount || 0);
+        if (cur.status === 'partial') return acc + (cur.paidAmount || 0);
+        return acc;
+      }, 0);
       const totalUnpaid = Math.max(0, totalExpected - totalCollected);
-      const studentCount = monthItems.length;
+      const studentCount = new Set(monthItems.map((t) => t.studentId)).size;
       const collectionRate =
         totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0;
 

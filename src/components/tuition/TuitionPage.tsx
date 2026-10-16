@@ -46,6 +46,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
 }) => {
   const {
     tuitionItems,
+    attendance,
     calculateTuitionForMonth,
     updateTuitionStatus,
     paymentAccount,
@@ -180,7 +181,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
         selectedClassId !== 'ALL' ? selectedClassId : undefined
       );
     }
-  }, [selectedMonth, selectedYear, selectedClassId, currentTenant?.id, classes.length]);
+  }, [selectedMonth, selectedYear, selectedClassId, currentTenant?.id, classes.length, attendance.length]);
 
   const [selectedTuitionForQR, setSelectedTuitionForQR] = useState<TuitionItem | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
@@ -218,7 +219,7 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   // - 'qr' if marked via automated reconciliation (or bankTransactionId)
   // - 'cash' if marked manually
   const getTuitionPaymentMethod = (t: TuitionItem): 'qr' | 'cash' | null => {
-    if (t.status !== 'paid') return null;
+    if (t.status !== 'paid' && t.status !== 'partial') return null;
     if (t.paymentMethod === 'qr') return 'qr';
     if (t.paymentMethod === 'cash') return 'cash';
     // Fallback: If bankTransactionId exists, it was reconciled from bank statement
@@ -233,17 +234,21 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
 
   // Tách Card Đã thu tiền thành 2:
   // 1. Thu qua ngân hàng (Quét QR sao kê)
-  const bankPaidTuitions = paidTuitions.filter((t) => getTuitionPaymentMethod(t) === 'qr');
+  const bankPaidTuitions = scopedTuitions.filter(
+    (t) => getTuitionPaymentMethod(t) === 'qr' && (t.status === 'paid' || (t.paidAmount || 0) > 0)
+  );
   const bankCollected = bankPaidTuitions.reduce(
-    (acc, cur) => acc + (cur.paidAmount || cur.totalAmount),
+    (acc, cur) => acc + (cur.status === 'paid' ? (cur.paidAmount || cur.totalAmount) : (cur.paidAmount || 0)),
     0
   );
   const bankPaidCount = bankPaidTuitions.length;
 
   // 2. Thu Tiền mặt (Thủ công)
-  const cashPaidTuitions = paidTuitions.filter((t) => getTuitionPaymentMethod(t) === 'cash');
+  const cashPaidTuitions = scopedTuitions.filter(
+    (t) => getTuitionPaymentMethod(t) === 'cash' && (t.status === 'paid' || (t.paidAmount || 0) > 0)
+  );
   const cashCollected = cashPaidTuitions.reduce(
-    (acc, cur) => acc + (cur.paidAmount || cur.totalAmount),
+    (acc, cur) => acc + (cur.status === 'paid' ? (cur.paidAmount || cur.totalAmount) : (cur.paidAmount || 0)),
     0
   );
   const cashPaidCount = cashPaidTuitions.length;
@@ -251,7 +256,8 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
   const totalCollected = bankCollected + cashCollected;
   const unpaidTuitions = scopedTuitions.filter((t) => t.status !== 'paid');
   const totalUnpaid = Math.max(0, totalExpected - totalCollected);
-  const unpaidCount = unpaidTuitions.length;
+  const unpaidCount = new Set(unpaidTuitions.map((t) => t.studentId)).size;
+  const scopedStudentsCount = new Set(scopedTuitions.map((t) => t.studentId)).size;
 
   // 2. Filtered tuitions for the Table / List: applies selectedStatus & searchTerm
   const filteredTuitions = scopedTuitions.filter((t) => {
@@ -441,13 +447,9 @@ export const TuitionPage: React.FC<TuitionPageProps> = ({
           <p className="text-2xl font-black text-slate-900 mt-2">{formatVND(totalExpected)}</p>
           <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
             <span>
-              {scopedTuitions.length} học sinh có số buổi tính phí &gt; 0
+              {scopedStudentsCount} học sinh có số buổi tính phí &gt; 0
             </span>
-            {selectedClassId === 'ALL' ? (
-              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
-                Tất cả {classes.length} lớp
-              </span>
-            ) : (
+            {selectedClassId !== 'ALL' && (
               <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px]">
                 {classes.find((c) => c.id === selectedClassId)?.name}
               </span>
