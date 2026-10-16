@@ -1119,20 +1119,20 @@ export const TenantSettingsPage: React.FC<TenantSettingsPageProps> = ({ onNaviga
                     Sổ tay tài liệu PDF 14 trang A4 chi tiết: Quản lý học sinh, Điểm danh di động, Học phí VietQR, Đối soát tự động...
                   </p>
                   <p className="text-[11px] text-slate-700 font-medium">
-                    Tên file: <strong className="text-slate-900">Huong_Dan_Su_Dung_EduTutor_Pro.pdf</strong>
+                    Tên file: <strong className="text-slate-900">HDSD_PM_diemdanh.pdf</strong>
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60">
                   <a
                     href={DEFAULT_GUIDE_PDF_URL}
-                    download="Huong_Dan_Su_Dung_EduTutor_Pro.pdf"
+                    download="HDSD_PM_diemdanh.pdf"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-2 cursor-pointer"
                   >
                     <FileDown className="w-4 h-4" />
-                    <span>Tải file PDF Hướng dẫn (14 trang)</span>
+                    <span>Tải file PDF Hướng dẫn</span>
                   </a>
                 </div>
               </div>
