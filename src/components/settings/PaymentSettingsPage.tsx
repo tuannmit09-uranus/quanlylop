@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { VIETNAMESE_BANKS, formatVND, getVietQRUrl } from '../../utils/vietqr';
+import { VIETNAMESE_BANKS, formatVND, getVietQRUrl, generateVietQRDataUrl } from '../../utils/vietqr';
 import {
   Building,
   CreditCard,
@@ -85,6 +85,21 @@ export const PaymentSettingsPage: React.FC = () => {
       setTestMemo(`${stu.schoolCode || 'PBC'}K${birthSuffix}${shortName}T72026`);
     }
   };
+
+  const [localLiveQRUrl, setLocalLiveQRUrl] = useState('');
+  const [useLocalQR, setUseLocalQR] = useState(false);
+
+  useEffect(() => {
+    generateVietQRDataUrl({
+      bankCodeOrBin: bankCode,
+      accountNumber,
+      amount: testAmount,
+      memo: testMemo,
+      width: 450,
+    })
+      .then(setLocalLiveQRUrl)
+      .catch(console.error);
+  }, [bankCode, accountNumber, testAmount, testMemo]);
 
   const liveQRUrl = getVietQRUrl(bankCode, accountNumber, testAmount, testMemo, accountName);
 
@@ -367,12 +382,11 @@ export const PaymentSettingsPage: React.FC = () => {
             <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-b from-blue-50/50 to-slate-50 rounded-2xl border border-blue-100 text-center space-y-3">
               <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200">
                 <img
-                  src={liveQRUrl}
+                  src={useLocalQR && localLiveQRUrl ? localLiveQRUrl : liveQRUrl}
                   alt="Mã VietQR Thanh toán học phí"
                   className="w-48 h-48 sm:w-56 sm:h-56 object-contain rounded-lg"
-                  onError={(e) => {
-                    // Fallback to stylized display if network image fails
-                    e.currentTarget.style.display = 'none';
+                  onError={() => {
+                    if (localLiveQRUrl) setUseLocalQR(true);
                   }}
                 />
               </div>

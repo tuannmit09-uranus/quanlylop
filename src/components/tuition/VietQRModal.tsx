@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TuitionItem } from '../../types';
 import { useApp } from '../../context/AppContext';
-import { formatVND, getVietQRUrl, removeVietnameseAccents } from '../../utils/vietqr';
+import { formatVND, getVietQRUrl, removeVietnameseAccents, generateVietQRDataUrl } from '../../utils/vietqr';
 import {
   QrCode,
   Copy,
@@ -24,6 +24,20 @@ export const VietQRModal: React.FC<VietQRModalProps> = ({ tuition, onClose }) =>
   const { paymentAccount, updateTuitionStatus } = useApp();
   const [copiedMemo, setCopiedMemo] = useState(false);
   const [copiedAcc, setCopiedAcc] = useState(false);
+  const [localQrUrl, setLocalQrUrl] = useState<string>('');
+  const [useLocal, setUseLocal] = useState(false);
+
+  useEffect(() => {
+    generateVietQRDataUrl({
+      bankCodeOrBin: paymentAccount.bankCode,
+      accountNumber: paymentAccount.accountNumber,
+      amount: tuition.totalAmount,
+      memo: tuition.paymentReference,
+      width: 450,
+    })
+      .then(setLocalQrUrl)
+      .catch(console.error);
+  }, [paymentAccount, tuition]);
 
   const qrImageUrl = getVietQRUrl(
     paymentAccount.bankCode,
@@ -74,12 +88,13 @@ export const VietQRModal: React.FC<VietQRModalProps> = ({ tuition, onClose }) =>
         <div className="bg-gradient-to-b from-slate-50 to-blue-50/40 p-4 rounded-2xl border border-slate-200/80 flex flex-col items-center">
           <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200/60 w-56 h-56 flex items-center justify-center overflow-hidden">
             <img
-              src={qrImageUrl}
+              src={useLocal && localQrUrl ? localQrUrl : qrImageUrl}
               alt="VietQR Code"
               className="w-full h-full object-contain"
-              onError={(e) => {
-                // Fallback SVG QR if offline or image error
-                (e.target as HTMLElement).style.display = 'none';
+              onError={() => {
+                if (localQrUrl) {
+                  setUseLocal(true);
+                }
               }}
             />
           </div>

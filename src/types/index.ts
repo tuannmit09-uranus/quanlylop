@@ -81,6 +81,7 @@ export interface PaymentAccount {
   bankCode: string; // e.g. 'VCB', 'MB', 'TCB', 'ICB', 'ACB', 'BIDV'
   accountNumber: string;
   accountName: string;
+  branch?: string;
   isDefault: boolean;
 }
 

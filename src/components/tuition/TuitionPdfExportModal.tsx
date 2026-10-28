@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { TuitionItem, ClassRoom } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { numberToVietnameseWords } from '../../utils/vietnameseNumberToWords';
+import { generateVietQRDataUrl } from '../../utils/vietqr';
 import {
   X,
   Download,
@@ -106,44 +107,35 @@ export const TuitionPdfExportModal: React.FC<TuitionPdfExportModalProps> = ({
     }
   }, [classTuitions.length, previewIndex]);
 
-  // Generate bottom portal QR code
+  // Generate bottom portal QR code with clear quiet zone
   useEffect(() => {
     QRCode.toDataURL(portalUrl || 'https://aquanlylop.vercel.app/', {
-      margin: 0,
-      width: 150,
+      margin: 1,
+      width: 200,
       errorCorrectionLevel: 'M',
     })
       .then((url) => setPortalQrCode(url))
       .catch((err) => console.error('Failed to generate portal QR', err));
   }, [portalUrl]);
 
-  // Helper to get or generate VietQR base64
+  // Helper to generate official VietQR (NAPAS 247 EMVCo) base64
   const getVietQRBase64 = async (tuition: TuitionItem): Promise<string> => {
-    const bank = paymentAccount.bankCode || 'VCB';
-    const acc = paymentAccount.accountNumber || '0123456789';
-    const encodedDesc = encodeURIComponent(tuition.paymentReference || '');
-    const encodedName = encodeURIComponent(paymentAccount.accountName || '');
-    const vietQrUrl = `https://img.vietqr.io/image/${bank}-${acc}-qr_only.png?amount=${tuition.totalAmount}&addInfo=${encodedDesc}&accountName=${encodedName}`;
-
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(vietQrUrl, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (!res.ok) throw new Error('VietQR fetch failed');
-      const blob = await res.blob();
-      return await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
+      return await generateVietQRDataUrl({
+        bankCodeOrBin: paymentAccount.bankCode || 'VCB',
+        accountNumber: paymentAccount.accountNumber || '0123456789',
+        amount: tuition.totalAmount,
+        memo: tuition.paymentReference || '',
+        width: 480,
       });
-    } catch {
-      // Offline fallback: generate clean QR code using qrcode
-      const payload = `STK:${acc}|NGAN_HANG:${bank}|SO_TIEN:${tuition.totalAmount}|NOI_DUNG:${tuition.paymentReference}`;
-      return await QRCode.toDataURL(payload, {
-        margin: 1,
-        width: 300,
-        errorCorrectionLevel: 'M',
+    } catch (err) {
+      console.error('Error generating VietQR Data URL', err);
+      return await generateVietQRDataUrl({
+        bankCodeOrBin: '970436',
+        accountNumber: '0123456789',
+        amount: tuition.totalAmount,
+        memo: tuition.paymentReference || '',
+        width: 480,
       });
     }
   };
@@ -235,14 +227,14 @@ export const TuitionPdfExportModal: React.FC<TuitionPdfExportModalProps> = ({
           windowHeight: 794,
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const imgData = canvas.toDataURL('image/png');
 
         if (i > 0) {
           doc.addPage([297, 210], 'landscape');
         }
 
         // A4 Landscape is 297mm x 210mm
-        doc.addImage(imgData, 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
+        doc.addImage(imgData, 'PNG', 0, 0, 297, 210, undefined, 'FAST');
       }
 
       // Save PDF with exact requested name: Thong_bao_thu_tien_thang_XX.pdf
@@ -604,19 +596,20 @@ export const TuitionPdfExportModal: React.FC<TuitionPdfExportModalProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <div
                     style={{
-                      width: '150px',
-                      height: '150px',
+                      width: '160px',
+                      height: '160px',
                       backgroundColor: '#ffffff',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      padding: '2px',
                     }}
                   >
                     {qrCodeMap[t.id] && (
                       <img
                         src={qrCodeMap[t.id]}
                         alt="VietQR"
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
                       />
                     )}
                   </div>
