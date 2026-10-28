@@ -87,13 +87,14 @@ export const TuitionReminderModal: React.FC<TuitionReminderModalProps> = ({
   const [isBatchRunning, setIsBatchRunning] = useState<boolean>(false);
   const [batchIndex, setBatchIndex] = useState<number>(0);
 
-  // 1. Gather all unpaid/partial tuition items for selected month & year (strictly where sessionCount > 0)
+  // 1. Gather all unpaid/partial tuition items for selected month & year (strictly where sessionCount > 0 and remaining due > 0)
   const unpaidTuitions = useMemo(() => {
     return tuitionItems.filter((t) => {
       const matchPeriod = t.periodMonth === selectedMonth && t.periodYear === selectedYear;
-      const isUnpaid = t.status !== 'paid';
       const matchTenant = !t.tenant_id || t.tenant_id === currentTenant.id;
       const hasSessions = (t.sessionCount || 0) > 0;
+      const dueAmount = (t.totalAmount || 0) - (t.paidAmount || 0);
+      const isUnpaid = t.status !== 'paid' && dueAmount > 0;
       return matchPeriod && isUnpaid && matchTenant && hasSessions;
     });
   }, [tuitionItems, selectedMonth, selectedYear, currentTenant.id]);

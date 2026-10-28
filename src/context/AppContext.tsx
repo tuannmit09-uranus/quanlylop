@@ -563,10 +563,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const deleted = getDeletedTenantIdsLocal();
             const standardized = (items || [])
               .filter((t) => !t.tenant_id || !deleted.has(t.tenant_id))
-              .map((t) => ({
-                ...t,
-                paymentReference: (t.paymentReference || '').replace(/_/g, ''),
-              }));
+              .map((t) => {
+                let resolvedStatus = t.status;
+                const paid = t.paidAmount || 0;
+                const total = t.totalAmount || 0;
+                if (paid >= total && total > 0 && (t.bankTransactionId || t.paidAt || t.status === 'paid')) {
+                  resolvedStatus = 'paid';
+                } else if (paid > 0 && paid < total) {
+                  resolvedStatus = 'partial';
+                }
+                return {
+                  ...t,
+                  status: resolvedStatus,
+                  paymentReference: (t.paymentReference || '').replace(/_/g, ''),
+                };
+              });
             setTuitionItems(standardized);
           }),
           subscribeToCollection<BankStatement>('bankStatements', (items) => {
@@ -828,6 +839,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   patchedItem.status = 'unpaid';
                   patchedItem.paidAmount = 0;
                   patchedItem.paidAt = null;
+                } else if ((patchedItem.paidAmount || 0) >= totalAmount && totalAmount > 0) {
+                  patchedItem.status = 'paid';
                 }
                 itemUpdated = true;
               }
@@ -3101,7 +3114,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             totalAmount,
             feePerSession: cls.feePerSession,
             paymentReference,
-            status: sessionCount === 0 && !existing.bankTransactionId ? 'unpaid' : existing.status,
+            status:
+              sessionCount === 0 && !existing.bankTransactionId
+                ? 'unpaid'
+                : (existing.paidAmount || 0) >= totalAmount && totalAmount > 0
+                ? 'paid'
+                : (existing.paidAmount || 0) > 0
+                ? 'partial'
+                : existing.status,
             paidAmount: sessionCount === 0 && !existing.bankTransactionId ? 0 : existing.paidAmount,
             paidAt: sessionCount === 0 && !existing.bankTransactionId ? null : existing.paidAt,
             updated_at: new Date().toISOString().split('T')[0],
