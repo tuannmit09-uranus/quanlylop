@@ -148,7 +148,7 @@ export function standardizePaymentReference(ref: string): string {
  * Generates the standardized Payment Reference Memo
  * Bank-Standard Format: [Mã trường]K[2 số cuối năm sinh][Tên học sinh]T[Tháng][Năm]
  * Example: SCHK09DucAnhT92026 (Strictly NO underscores, prevents banking apps from stripping characters)
- * Auto-disambiguates when duplicate names exist in the student pool
+ * Auto-disambiguates when duplicate names exist in the same birth cohort & school
  */
 export function generatePaymentReference(
   schoolCode: string,
@@ -161,7 +161,18 @@ export function generatePaymentReference(
 ): string {
   const cleanSchool = (schoolCode || 'SCH').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const birthSuffix = String(birthYear || 2010).slice(-2);
-  const rawUniqueName = extractUniqueNameForMemo(studentFullName, studentId, contextStudents);
+
+  // Filter context students to only those sharing the same cohort (birthYear suffix and school)
+  // because the prefix [SchoolCode]K[BirthSuffix] already guarantees 100% uniqueness across cohorts!
+  const cohortStudents = contextStudents
+    ? contextStudents.filter((s) => {
+        const sBirthSuffix = String(s.birthYear || 2010).slice(-2);
+        const sSchool = (s.schoolCode || 'SCH').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return sBirthSuffix === birthSuffix && (sSchool === cleanSchool || !s.schoolCode);
+      })
+    : undefined;
+
+  const rawUniqueName = extractUniqueNameForMemo(studentFullName, studentId, cohortStudents);
   const uniqueName = rawUniqueName.replace(/[^a-zA-Z0-9]/g, '');
   return `${cleanSchool}K${birthSuffix}${uniqueName}T${month}${year}`;
 }
